@@ -1,16 +1,16 @@
 # JB WM — Frontend
 
-> **JB WM Agent** 프론트엔드. 능동형 Life Event Agent의 **고객 대면 인터페이스**입니다.
+> **JB WM Agent** 프론트엔드. 건강·자산을 하나의 **회복탄력성 상태**로 보는 능동형 lifelong WM 에이전트의 **고객 대면 인터페이스**입니다.
 
-React 기반 워크스페이스로, 고객(주 타깃: 고령층)이 에이전트의 관찰·판단·제안을 보고, 민감한 액션을 **승인/거절/수정**하는 화면을 제공합니다. 백엔드 상태를 렌더링하고 고객 의도를 제출할 뿐, 비즈니스 결정이나 에이전트 권한을 소유하지 않습니다.
+React 기반 워크스페이스로, 고객(주 타깃: 고령층)이 자신의 **회복탄력성 상태**(건강+자산 통합)와 에이전트의 판단·제안을 보고, 민감한 액션을 **승인/거절/수정**하는 화면을 제공합니다. 백엔드 상태를 렌더링하고 의도를 제출할 뿐, 비즈니스 결정이나 에이전트 권한을 소유하지 않습니다.
 
-백엔드 설계는 [`../JB-WM-backend`](../JB-WM-backend) 참고.
+> 제품 개념의 정본은 백엔드 [`docs/01_PRODUCT_CONTEXT.md`](../JB-WM-backend/docs/01_PRODUCT_CONTEXT.md). 핵심: 건강·자산 통합 / 자산 변동 선제 감지 / 지불의향 개인화 / 의료 권고는 생성하지 않음(재무·통계참고·연결만).
 
 ---
 
 ## 핵심 화면
 
-챗 UI가 본질이 아닙니다. 본질은 **고객의 현재 상태를 시각화**하는 것입니다.
+챗 UI가 본질이 아닙니다. 본질은 **고객의 회복탄력성 상태를 시각화**하는 것입니다.
 
 ```mermaid
 flowchart TB
@@ -84,19 +84,19 @@ sequenceDiagram
 
 ## 기술 스택
 
-| 레이어 | 기술 |
-|---|---|
-| 프레임워크 | React 19 + TypeScript |
-| 번들러 | Vite |
-| 스타일 | Tailwind CSS (JB 브랜드 토큰 — `tailwind.config.ts`) |
-| UI | shadcn/ui |
-| 라우팅 | React Router v7 |
-| 서버 상태 | TanStack Query |
-| 로컬 UI 상태 | Zustand (필요 시) |
-| 폼 | React Hook Form + Zod |
-| 테이블/차트 | TanStack Table · Recharts |
-| i18n | react-i18next (ko 우선, en 대비) |
-| 패키지 | pnpm |
+| Layer           | Library / Tool                     |
+| --------------- | ---------------------------------- |
+| Framework       | React 19 + TypeScript              |
+| Bundler         | Vite                               |
+| Styling         | Tailwind CSS (JB brand tokens)     |
+| UI              | shadcn/ui                          |
+| Routing         | React Router v7                    |
+| Server state    | TanStack Query                     |
+| Local UI state  | Zustand (when needed)              |
+| Forms           | React Hook Form + Zod              |
+| Tables / Charts | TanStack Table · Recharts          |
+| i18n            | react-i18next (ko-first, en-ready) |
+| Package manager | pnpm                               |
 
 ---
 
@@ -135,31 +135,31 @@ sequenceDiagram
 
 ## i18n
 
-- 기본 `ko`, 구조는 ko/en 대비 (`react-i18next`)
-- 문자열 하드코딩 금지 — `t("...")` 사용. en은 번역 파일만 추가하면 동작
-- 언어 토글은 JB 사이트 패턴 (헤더 `ko / en`)
+- 기본 `ko`. 현재는 `src/i18n.ts`의 최소 `t()` (ko dict). en은 dict만 추가하면 동작 (구조 대비).
+- 문자열 하드코딩 금지 — `t("...")` 사용.
+- 규모가 커지면 `react-i18next`로 확장.
 
 ---
 
 ## 개발
 
+전제: Node LTS(nvm) + pnpm. 시스템에 pnpm이 없으면 한 번만:
 ```bash
-# 시스템 도구 (백엔드 SETUP과 공유): nvm + Node LTS
 corepack enable && corepack prepare pnpm@latest --activate
-
-# 프로젝트 초기화 (최초 1회)
-pnpm create vite . --template react-ts
-pnpm install
-pnpm add react-router-dom @tanstack/react-query zustand react-hook-form zod
-pnpm add react-i18next i18next i18next-browser-languagedetector
-pnpm add -D tailwindcss @tailwindcss/vite @biomejs/biome vitest @testing-library/react
-
-# 실행
-pnpm dev      # 개발 서버
-pnpm build    # 프로덕션 빌드
-pnpm lint     # Biome
-pnpm test     # Vitest
 ```
+
+**clone 후 그대로 실행** (프로젝트는 이미 스캐폴드되어 있음):
+```bash
+pnpm install      # 의존성 설치 (esbuild 빌드 승인은 pnpm-workspace.yaml에 포함 → 자동)
+pnpm dev          # http://localhost:5173
+pnpm build        # 프로덕션 빌드 (tsc + vite)
+```
+
+> 프론트는 백엔드 API(:8000)를 호출합니다. **백엔드를 먼저 띄우세요**:
+> `cd ../JB-WM-backend && source .venv/bin/activate && uvicorn app.main:app --reload`
+> (백엔드 셋업·실행은 ../JB-WM-backend의 `docs/SETUP.md`, `docs/RUNBOOK.md` 참고)
+>
+> API 주소는 `VITE_API_BASE` 환경변수로 바꿀 수 있어요 (기본 `http://localhost:8000`).
 
 ---
 
