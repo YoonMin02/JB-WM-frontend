@@ -25,11 +25,15 @@ export interface Proposal {
   has_external_effect: boolean;
   status: string;
 }
+export interface ActiveNeeds {
+  primary_need?: string;
+  needs?: Record<string, "none" | "low" | "mid" | "high" | string>;
+}
 export interface Session {
   session_id: string;
   customer_id: string;
   state: string;
-  active_intents: Record<string, string>;
+  active_needs: ActiveNeeds;
   allowed_actions: string[];
   pending_proposal: {
     id: string;
@@ -46,6 +50,46 @@ export interface AgentEvent {
   detail: Record<string, unknown>;
   created_at: string;
 }
+export interface Accounts {
+  accounts: {
+    account_id: string;
+    bank_name: string;
+    product_name: string;
+    account_type: string;
+    balance_krw: number;
+    available_krw: number;
+    last_transaction_on: string | null;
+  }[];
+  liquidity_summary: {
+    available_cash_krw: number;
+    emergency_fund_months: number | null;
+  };
+}
+export interface Transactions {
+  transactions: {
+    transacted_at: string;
+    direction: string;
+    description: string;
+    amount_krw: number;
+    category_hint: string;
+  }[];
+  spending_summary: {
+    monthly_outflow_krw: number;
+    medical_spending_krw: number;
+    fixed_cost_krw: number;
+    record_count: number;
+  };
+}
+export interface CardBills {
+  bills: {
+    card_name: string;
+    charge_month: string;
+    charge_krw: number;
+    settlement_date: string | null;
+    medical_charge_krw: number;
+  }[];
+  upcoming_card_payment_krw: number;
+}
 
 // ── 호출 ──
 export const listCustomers = () => req<Customer[]>("/customers");
@@ -61,6 +105,13 @@ export const getHealth = (cid: string) =>
 export const getLoans = (cid: string) =>
   req<{ loans: { balance: number; next_due_date: string | null; monthly_payment: number }[] }>(
     `/customers/${cid}/loans`,
+  );
+export const getAccounts = (cid: string) => req<Accounts>(`/customers/${cid}/accounts`);
+export const getTransactions = (cid: string) => req<Transactions>(`/customers/${cid}/transactions`);
+export const getCardBills = (cid: string) => req<CardBills>(`/customers/${cid}/card-bills`);
+export const getLoanSwitchPrecheck = (cid: string) =>
+  req<{ repayment_available?: boolean; prepayment_penalty_krw?: number; note?: string }>(
+    `/customers/${cid}/loan-switch-precheck`,
   );
 
 export const createSession = (cid: string) =>

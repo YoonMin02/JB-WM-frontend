@@ -7,11 +7,6 @@ const STATE_LABEL: Record<string, string> = {
   Monitoring: "관찰 중",
   SignalDetected: "신호 감지",
   AssessNeed: "필요도 평가",
-  AssetDefenseIntent: "현금흐름 방어",
-  InsuranceIntent: "보험 점검",
-  InvestmentAdjustIntent: "투자 조정",
-  HealthCareIntent: "의료비 대비",
-  LifePlanIntent: "생애 설계",
   GeneratePlan: "계획 수립",
   RiskCheck: "리스크 검토",
   UserApproval: "승인 대기",
@@ -21,6 +16,31 @@ const STATE_LABEL: Record<string, string> = {
   ClarifyUser: "질문 중",
 };
 const label = (s: string) => STATE_LABEL[s] ?? s;
+
+const NEED_LABEL: Record<string, string> = {
+  medical_cost_need: "의료비",
+  insurance_need: "보험",
+  cashflow_need: "현금흐름",
+  asset_defense_need: "자산방어",
+  investment_adjust_need: "투자전략",
+  life_plan_need: "생애설계",
+};
+const PRIMARY_NEED_LABEL: Record<string, string> = {
+  medical_cost: "의료비",
+  insurance: "보험",
+  cashflow: "현금흐름",
+  asset_defense: "자산방어",
+  investment_adjust: "투자전략",
+  life_plan: "생애설계",
+  preference_update: "성향 업데이트",
+  none: "없음",
+};
+const NEED_LEVEL_LABEL: Record<string, string> = {
+  none: "없음",
+  low: "낮음",
+  mid: "중간",
+  high: "높음",
+};
 
 export default function App() {
   const qc = useQueryClient();
@@ -102,6 +122,8 @@ export default function App() {
 
       <main className="space-y-5 px-5 py-5">
         <Resilience cid={customer.id} />
+        <NeedAssessmentPanel session={s} events={events.data?.events ?? []} />
+        <FinancialContext cid={customer.id} />
 
         {/* 상황 시뮬레이션 */}
         <section>
@@ -232,6 +254,113 @@ function Resilience({ cid }: { cid: string }) {
   );
 }
 
+function NeedAssessmentPanel({
+  session,
+  events,
+}: {
+  session?: api.Session;
+  events: api.AgentEvent[];
+}) {
+  const latest = [...events].reverse().find((e) => e.type === "need_assessment");
+  const eventAssessment = latest ? assessmentFromEvent(latest.detail) : undefined;
+  const needs = session?.active_needs?.needs ?? eventAssessment?.needs ?? {};
+  const primary = session?.active_needs?.primary_need ?? eventAssessment?.primary_need ?? "none";
+  const rationale = typeof latest?.detail?.rationale === "string" ? latest.detail.rationale : "";
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between">
+        <H>{t("need_assessment")}</H>
+        <span className="rounded-full bg-[#EAF0FF] px-3 py-1 text-xs font-bold text-[#0A31A8]">
+          {PRIMARY_NEED_LABEL[primary] ?? primary}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {Object.entries(NEED_LABEL).map(([key, name]) => (
+          <NeedMeter key={key} label={name} level={String(needs[key] ?? "none")} />
+        ))}
+      </div>
+      {rationale && <p className="mt-2 rounded-xl bg-white p-3 text-sm leading-relaxed text-[#555]">{rationale}</p>}
+    </section>
+  );
+}
+
+function NeedMeter({ label, level }: { label: string; level: string }) {
+  const score: Record<string, number> = { none: 0, low: 1, mid: 2, high: 3 };
+  const width = `${((score[level] ?? 0) / 3) * 100}%`;
+  const strong = level === "high";
+  return (
+    <div className="rounded-xl bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-[#777]">{label}</span>
+        <span className={`text-xs font-bold ${strong ? "text-[#0A31A8]" : "text-[#777]"}`}>
+          {NEED_LEVEL_LABEL[level] ?? level}
+        </span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E8EBF2]">
+        <div className={`h-full rounded-full ${strong ? "bg-[#0A31A8]" : "bg-[#7B93D1]"}`} style={{ width }} />
+      </div>
+    </div>
+  );
+}
+
+function FinancialContext({ cid }: { cid: string }) {
+  const q = useQuery({
+    queryKey: ["financial-context", cid],
+    queryFn: async () => {
+      const [accounts, transactions, cardBills, precheck, loans] = await Promise.all([
+        api.getAccounts(cid),
+        api.getTransactions(cid),
+        api.getCardBills(cid),
+        api.getLoanSwitchPrecheck(cid),
+        api.getLoans(cid),
+      ]);
+      return { accounts, transactions, cardBills, precheck, loans };
+    },
+  });
+  if (!q.data) return null;
+  const { accounts, transactions, cardBills, precheck, loans } = q.data;
+  const loan = loans.loans[0];
+
+  return (
+    <section>
+      <H>{t("financial_context")}</H>
+      <div className="grid grid-cols-2 gap-2">
+        <Stat
+          title={t("available_cash")}
+          value={formatKrw(accounts.liquidity_summary.available_cash_krw)}
+          bad={(accounts.liquidity_summary.emergency_fund_months ?? 0) < 3}
+        />
+        <Stat
+          title={t("monthly_outflow")}
+          value={formatKrw(transactions.spending_summary.monthly_outflow_krw)}
+          bad={transactions.spending_summary.medical_spending_krw > 0}
+        />
+        <Stat title={t("card_due")} value={formatKrw(cardBills.upcoming_card_payment_krw)} bad />
+        <Stat
+          title={t("loan_due")}
+          value={loan ? formatKrw(loan.monthly_payment) : "없음"}
+          bad={!!loan}
+        />
+      </div>
+      <div className="mt-2 rounded-xl bg-white p-3 text-sm leading-relaxed text-[#555]">
+        <div className="flex justify-between gap-3">
+          <span>{t("medical_spending")}</span>
+          <b>{formatKrw(transactions.spending_summary.medical_spending_krw)}</b>
+        </div>
+        <div className="mt-1 flex justify-between gap-3">
+          <span>{t("record_count")}</span>
+          <b>{transactions.spending_summary.record_count}건</b>
+        </div>
+        <div className="mt-1 flex justify-between gap-3">
+          <span>{t("loan_switch")}</span>
+          <b>{precheck.repayment_available ? "가능" : "확인 필요"}</b>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── 작은 컴포넌트 ──
 function H({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-2 text-sm font-bold text-[#848484]">{children}</h2>;
@@ -304,8 +433,8 @@ function eventLabel(e: api.AgentEvent): string {
   switch (e.type) {
     case "state_transition":
       return `${label(String(e.detail.from ?? ""))} → ${label(String(e.detail.to ?? ""))}`;
-    case "intent":
-      return `의도 추론: ${label(String(e.detail.state ?? ""))}`;
+    case "need_assessment":
+      return `필요도 평가: ${PRIMARY_NEED_LABEL[String(e.detail.primary_need ?? "none")] ?? "확인"}`;
     case "plan":
       return "계획 생성";
     case "execution":
@@ -317,4 +446,19 @@ function eventLabel(e: api.AgentEvent): string {
     default:
       return e.type;
   }
+}
+
+function formatKrw(value: number): string {
+  if (value >= 100_000_000) return `${Math.round(value / 100_000_000)}억원`;
+  if (value >= 10_000) return `${Math.round(value / 10_000)}만원`;
+  return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function assessmentFromEvent(detail: Record<string, unknown>): api.ActiveNeeds {
+  return {
+    primary_need: typeof detail.primary_need === "string" ? detail.primary_need : "none",
+    needs: Object.fromEntries(
+      Object.keys(NEED_LABEL).map((key) => [key, typeof detail[key] === "string" ? String(detail[key]) : "none"]),
+    ),
+  };
 }
