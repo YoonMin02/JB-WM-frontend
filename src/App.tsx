@@ -6,6 +6,7 @@ import { t } from "./i18n";
 const STATE_LABEL: Record<string, string> = {
   Monitoring: "관찰 중",
   SignalDetected: "신호 감지",
+  AssessNeed: "필요도 평가",
   AssetDefenseIntent: "현금흐름 방어",
   InsuranceIntent: "보험 점검",
   InvestmentAdjustIntent: "투자 조정",
