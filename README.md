@@ -16,14 +16,16 @@ React 기반 워크스페이스로, 고객(주 타깃: 고령층)이 자신의 *
 flowchart TB
     subgraph FE["프론트엔드"]
         DASH["① Agent Dashboard<br/>상태 기반 UI"]
-        CHAT["② Chat<br/>상태 수정 인터페이스"]
-        TIME["③ Timeline<br/>에이전트 활동 이력"]
-        APPROVE["④ Approval Cards<br/>액션 1건 승인"]
+        NEED["② Need Assessment<br/>통합 필요도"]
+        DATA["③ Financial Context<br/>mock 금융 컨텍스트"]
+        RECORD["④ Records<br/>전문·판단·계획 저장 이력"]
+        APPROVE["⑤ Approval Cards<br/>액션 1건 승인"]
     end
     BE[(백엔드 API)]
     DASH --> BE
-    CHAT --> BE
-    TIME --> BE
+    NEED --> BE
+    DATA --> BE
+    RECORD --> BE
     APPROVE --> BE
 ```
 
@@ -35,27 +37,41 @@ flowchart TB
 - 보험 공백: 존재
 - 투자 위험도: 과다
 
+통합 필요도:
+- 의료비 / 보험 / 현금흐름 / 자산방어 / 투자전략 / 생애설계
+
 Agent 권장 액션:
-[검진 예약]  [보험 보장 분석]  [현금흐름 플랜 생성]
+[보험 보장 분석]  [현금흐름 플랜 생성]  [승인 필요 액션]
 ```
 
-### ② Chat (상태 수정 인터페이스)
+### ② Need Assessment
 ```
-고객: 보험만 먼저 확인해줘
-Agent: 현재 실손보험으로 일부 보장되지만, 심혈관 특약은 없습니다.
-        추가 플랜을 생성할까요?
+primary_need: cashflow
+cashflow_need: high
+asset_defense_need: high
+insurance_need: mid
 ```
-챗은 "대화 잘하는 봇"이 아니라 **고객 의도를 상태로 바꾸는** 입력 수단입니다.
+고객이 직접 분류하지 않아도 백엔드의 `AssessNeed` 결과를 막대/라벨로 표시합니다.
 
-### ③ Timeline (에이전트 느낌의 핵심)
+### ③ Financial Context
 ```
-5/21 건강 이상 신호 감지
-5/21 보험 공백 분석 완료
-5/22 고객 승인 대기
-5/22 보험 분석 리포트 생성
+출금가능 현금 / 월 지출 / 카드 결제 / 대출 상환
+최근 의료비 / 거래 기록 수 / 대출이동 사전조회
+```
+API body shape 기반 mock 금융 데이터를 고객이 확인할 수 있게 보여줍니다.
+
+### ④ Records / Timeline
+```
+Timeline:
+- 신호 감지 → 필요도 평가 → 계획 생성 → 승인 대기
+
+Records:
+- AgentMessage
+- NeedAssessmentRecord
+- PlanRecord
 ```
 
-### ④ Approval Cards
+### ⑤ Approval Cards
 - 외부 효과가 있는 액션(예약·청구·가입·송금·포트폴리오 변경)은 **그 액션 1건에 대해서만** 승인.
 - 승인/거절/수정 버튼. 백엔드가 유효 행동을 내려주고, 프론트는 그것만 노출.
 
@@ -73,9 +89,8 @@ sequenceDiagram
     FE->>U: 액션 카드 표시 (요약 + 근거)
     U->>FE: 승인
     FE->>BE: POST /proposals/{id}/approve
-    BE-->>FE: next_state = ExecuteAction
-    Note over BE: Executor가 실행 (LLM 미경유)
-    BE-->>FE: 상태 = VerifyResult → 결과 표시
+    BE-->>FE: 최종 Session 객체
+    Note over BE: Executor가 실행 (LLM 미경유) 후 Monitoring 복귀
 ```
 
 프론트는 **유효 전이를 독자 판단하지 않습니다.** 백엔드 응답의 `allowed_actions`만 렌더링합니다.
@@ -89,14 +104,27 @@ sequenceDiagram
 | Framework       | React 19 + TypeScript              |
 | Bundler         | Vite                               |
 | Styling         | Tailwind CSS (JB brand tokens)     |
-| UI              | shadcn/ui                          |
-| Routing         | React Router v7                    |
+| UI              | 자체 컴포넌트 (Tailwind utility)   |
+| Routing         | 단일 화면 (`/`)                    |
 | Server state    | TanStack Query                     |
-| Local UI state  | Zustand (when needed)              |
-| Forms           | React Hook Form + Zod              |
-| Tables / Charts | TanStack Table · Recharts          |
-| i18n            | react-i18next (ko-first, en-ready) |
+| Local UI state  | React `useState`                   |
+| Forms           | 현재 없음                          |
+| Tables / Charts | 현재 없음                          |
+| i18n            | `src/i18n.ts` 최소 dict            |
 | Package manager | pnpm                               |
+
+### Planned / Not Installed
+
+아래 라이브러리는 README 초안의 계획에는 있었지만 현재 `package.json`에는 없습니다.
+도입 전까지 구현/문서에서 실제 의존성처럼 취급하지 않습니다.
+
+- React Router
+- Zustand
+- shadcn/ui
+- React Hook Form / Zod
+- TanStack Table
+- Recharts
+- react-i18next
 
 ---
 
@@ -114,21 +142,21 @@ sequenceDiagram
 
 ## 주요 라우트
 
-| 라우트 | 용도 |
+현재는 React Router를 쓰지 않는 단일 화면 앱입니다.
+
+| 화면 | 용도 |
 |---|---|
-| `/` | 진입 / 대시보드 |
-| `/dashboard` | 상태 기반 메인 |
-| `/timeline` | 에이전트 활동 이력 |
-| `/chat` | 의도 입력/수정 |
-| `/proposals/:id` | 액션 승인 상세 |
-| `/settings` | 선호/제약(개인화) · 언어 |
+| `/` | 고객 상태, 통합 필요도, 금융 컨텍스트, 제안, 타임라인, 저장 기록 |
+
+후속으로 라우터를 도입하면 `/dashboard`, `/timeline`, `/chat`, `/proposals/:id`, `/settings`를 분리할 수 있습니다.
 
 ---
 
 ## 상태 관리 정책
 
 - **서버 상태 = TanStack Query** (세션 상태, proposal, 이벤트, 도메인 데이터)
-- **로컬 UI 상태 = Zustand** (사이드바, 탭 등, 필요할 때만)
+- **로컬 UI 상태 = React `useState`** (현재 session id 등)
+- **Zustand = planned** (사이드바, 탭 등 복잡한 UI 상태가 생길 때만)
 - 백엔드에서 파생 가능한 데이터를 Zustand에 중복 저장하지 않음
 
 ---
