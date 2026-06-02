@@ -71,11 +71,17 @@ export default function App() {
     queryFn: () => api.getEvents(sid!),
     enabled: !!sid,
   });
+  const records = useQuery({
+    queryKey: ["records", sid],
+    queryFn: () => api.getRecords(sid!),
+    enabled: !!sid,
+  });
 
   const refetchAll = () => {
     qc.invalidateQueries({ queryKey: ["session", sid] });
     qc.invalidateQueries({ queryKey: ["proposals", sid] });
     qc.invalidateQueries({ queryKey: ["events", sid] });
+    qc.invalidateQueries({ queryKey: ["records", sid] });
   };
 
   const signal = useMutation({
@@ -215,6 +221,8 @@ export default function App() {
             </ol>
           </div>
         </section>
+
+        <RecordsPanel records={records.data} />
 
         <button onClick={newSession} className="w-full rounded-xl border border-[#D5DBE5] bg-white py-3 font-semibold text-[#666]">
           {t("reset")}
@@ -361,6 +369,73 @@ function FinancialContext({ cid }: { cid: string }) {
   );
 }
 
+function RecordsPanel({ records }: { records?: api.SessionRecords }) {
+  if (!records) return null;
+  const latestAssessment = records.need_assessments.at(-1);
+  const latestPlan = records.plans.at(-1);
+  const latestMessages = records.messages.slice(-4);
+
+  return (
+    <section>
+      <H>{t("records")}</H>
+      <div className="rounded-xl bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <MiniCount label={t("messages")} value={records.messages.length} />
+          <MiniCount label={t("assessments")} value={records.need_assessments.length} />
+          <MiniCount label={t("plans")} value={records.plans.length} />
+        </div>
+
+        {latestAssessment && (
+          <div className="mt-3 border-t border-[#EDF0F5] pt-3">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-bold text-[#333]">{t("last_assessment")}</span>
+              <span className="rounded-full bg-[#EAF0FF] px-2 py-1 text-xs font-bold text-[#0A31A8]">
+                {PRIMARY_NEED_LABEL[latestAssessment.primary_need] ?? latestAssessment.primary_need}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-[#555]">{latestAssessment.rationale}</p>
+          </div>
+        )}
+
+        {latestPlan && (
+          <div className="mt-3 border-t border-[#EDF0F5] pt-3">
+            <div className="text-sm font-bold text-[#333]">{t("last_plan")}</div>
+            <p className="mt-2 text-sm leading-relaxed text-[#555]">{latestPlan.explanation}</p>
+            <p className="mt-1 text-xs text-[#888]">
+              ActionProposal {latestPlan.proposal_ids.length}건 저장
+            </p>
+          </div>
+        )}
+
+        {latestMessages.length > 0 && (
+          <div className="mt-3 border-t border-[#EDF0F5] pt-3">
+            <div className="text-sm font-bold text-[#333]">{t("transcript")}</div>
+            <ol className="mt-2 space-y-2">
+              {latestMessages.map((m, index) => (
+                <li key={`${m.created_at}-${index}`} className="text-sm leading-relaxed">
+                  <span className="mr-2 rounded bg-[#F2F4F8] px-2 py-0.5 text-xs font-bold text-[#666]">
+                    {roleLabel(m.role)}
+                  </span>
+                  <span className="text-[#555]">{truncate(m.content, 72)}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MiniCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-[#F6F7FB] p-2">
+      <div className="text-lg font-extrabold text-[#0A31A8]">{value}</div>
+      <div className="text-xs font-semibold text-[#777]">{label}</div>
+    </div>
+  );
+}
+
 // ── 작은 컴포넌트 ──
 function H({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-2 text-sm font-bold text-[#848484]">{children}</h2>;
@@ -461,4 +536,18 @@ function assessmentFromEvent(detail: Record<string, unknown>): api.ActiveNeeds {
       Object.keys(NEED_LABEL).map((key) => [key, typeof detail[key] === "string" ? String(detail[key]) : "none"]),
     ),
   };
+}
+
+function roleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    user: "고객",
+    system: "시스템",
+    assistant: "Agent",
+    tool: "Tool",
+  };
+  return labels[role] ?? role;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}...` : value;
 }

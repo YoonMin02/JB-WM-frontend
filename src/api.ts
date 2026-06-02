@@ -50,6 +50,28 @@ export interface AgentEvent {
   detail: Record<string, unknown>;
   created_at: string;
 }
+export interface SessionRecords {
+  messages: {
+    role: string;
+    content: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }[];
+  need_assessments: {
+    primary_need: string;
+    needs: Record<string, string>;
+    confidence: number;
+    rationale: string;
+    raw_output: Record<string, unknown>;
+    created_at: string;
+  }[];
+  plans: {
+    explanation: string;
+    raw_output: Record<string, unknown>;
+    proposal_ids: string[];
+    created_at: string;
+  }[];
+}
 export interface Accounts {
   accounts: {
     account_id: string;
@@ -125,6 +147,7 @@ export const postSignal = (sid: string, source: string, payload: Record<string, 
 export const getProposals = (sid: string) =>
   req<{ proposals: Proposal[] }>(`/agent-sessions/${sid}/proposals`);
 export const getEvents = (sid: string) => req<{ events: AgentEvent[] }>(`/agent-sessions/${sid}/events`);
+export const getRecords = (sid: string) => req<SessionRecords>(`/agent-sessions/${sid}/records`);
 export const decide = (pid: string, action: "approve" | "reject" | "revise", note = "") =>
   req<Session>(`/proposals/${pid}/${action}`, {
     method: "POST",
