@@ -196,6 +196,6 @@ pnpm build        # 프로덕션 빌드 (tsc + vite)
 JB금융그룹 공식 사이트에서 추출한 브랜드 토큰을 사용합니다.
 
 - `tailwind.config.ts` — 색상·타이포·레이아웃 토큰 (커밋됨)
-- `docs/JB_BRAND_DESIGN.md` — 전체 디자인 레퍼런스 (**gitignore** — JB 사이트 추출물)
+- `docs/JB_BRAND_DESIGN.md` — 전체 디자인 레퍼런스 (커밋됨)
 
 주요 토큰: Primary `#0A31A8`, Accent `#1C56FF`, 본문 `#333333`, 폰트 SUIT Variable.

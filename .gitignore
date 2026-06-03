@@ -142,5 +142,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Local reference docs (brand design extracted from JB site — not project code)
-docs/
+# Local reference docs. Keep the curated brand reference, ignore ad-hoc dumps.
+docs/*
+!docs/JB_BRAND_DESIGN.md
