@@ -19,7 +19,7 @@ flowchart TB
         NEED["② Need Assessment<br/>통합 필요도"]
         DATA["③ Financial Context<br/>mock 금융 컨텍스트"]
         RECORD["④ Records<br/>전문·판단·계획 저장 이력"]
-        APPROVE["⑤ Approval Cards<br/>액션 1건 승인"]
+        APPROVE["⑤ Approval Cards<br/>proposal별 승인"]
     end
     BE[(백엔드 API)]
     DASH --> BE
@@ -72,7 +72,8 @@ Records:
 ```
 
 ### ⑤ Approval Cards
-- 외부 효과가 있는 액션(예약·청구·가입·송금·포트폴리오 변경)은 **그 액션 1건에 대해서만** 승인.
+- 외부 효과가 있는 액션(예약·청구·가입·송금·포트폴리오 변경)은 한 번에 여러 장 표시될 수 있습니다.
+- 승인 자체는 **proposal 1건 단위**로 적용됩니다.
 - 승인/거절/수정 버튼. 백엔드가 유효 행동을 내려주고, 프론트는 그것만 노출.
 
 ---
@@ -85,8 +86,8 @@ sequenceDiagram
     participant FE as 프론트
     participant BE as 백엔드
 
-    BE-->>FE: 세션 상태 = UserApproval<br/>pending_proposal + allowed_actions
-    FE->>U: 액션 카드 표시 (요약 + 근거)
+    BE-->>FE: 세션 상태 = UserApproval<br/>proposals + allowed_actions
+    FE->>U: 승인 필요 액션 카드들을 표시 (요약 + 근거)
     U->>FE: 승인
     FE->>BE: POST /proposals/{id}/approve
     BE-->>FE: 최종 Session 객체
@@ -105,7 +106,7 @@ sequenceDiagram
 | Bundler         | Vite                               |
 | Styling         | Tailwind CSS (JB brand tokens)     |
 | UI              | 자체 컴포넌트 (Tailwind utility)   |
-| Routing         | 단일 화면 (`/`)                    |
+| Routing         | React Router (`/login`, `/main`, `/records`) |
 | Server state    | TanStack Query                     |
 | Local UI state  | React `useState`                   |
 | Forms           | 현재 없음                          |
@@ -118,7 +119,6 @@ sequenceDiagram
 아래 라이브러리는 README 초안의 계획에는 있었지만 현재 `package.json`에는 없습니다.
 도입 전까지 구현/문서에서 실제 의존성처럼 취급하지 않습니다.
 
-- React Router
 - Zustand
 - shadcn/ui
 - React Hook Form / Zod
@@ -134,7 +134,7 @@ sequenceDiagram
 
 - 큰 글씨 / 높은 대비 / 넉넉한 터치 영역
 - 쉬운 용어 (전문 금융/의료 용어 풀어쓰기)
-- 명확한 단일 액션 승인 (한 번에 하나)
+- 명확한 proposal별 승인 (한 카드가 한 실행 단위)
 - 진행 상황의 시각적 타임라인
 - (확장) 음성 입력·읽어주기
 
@@ -142,13 +142,15 @@ sequenceDiagram
 
 ## 주요 라우트
 
-현재는 React Router를 쓰지 않는 단일 화면 앱입니다.
+현재는 React Router로 페이지를 나눕니다.
 
 | 화면 | 용도 |
 |---|---|
-| `/` | 고객 상태, 통합 필요도, 금융 컨텍스트, 제안, 타임라인, 저장 기록 |
+| `/login` | mock 고객 선택 로그인 |
+| `/main` | 고객 상태, 통합 필요도, 금융 컨텍스트, 제안, 타임라인 |
+| `/records` | 저장된 판단 기록/전문/계획 전체 보기 |
 
-후속으로 라우터를 도입하면 `/dashboard`, `/timeline`, `/chat`, `/proposals/:id`, `/settings`를 분리할 수 있습니다.
+루트(`/`)는 `/main`으로 보냅니다. 로그인되지 않은 상태에서 `/main` 또는 `/records`에 접근하면 `/login`으로 보냅니다.
 
 ---
 
@@ -178,7 +180,7 @@ corepack enable && corepack prepare pnpm@latest --activate
 
 **clone 후 그대로 실행** (프로젝트는 이미 스캐폴드되어 있음):
 ```bash
-pnpm install      # 의존성 설치 (esbuild 빌드 승인은 pnpm-workspace.yaml에 포함 → 자동)
+pnpm install      # package.json/pnpm-lock.yaml 기준 의존성 설치
 pnpm dev          # http://localhost:5173
 pnpm build        # 프로덕션 빌드 (tsc + vite)
 ```

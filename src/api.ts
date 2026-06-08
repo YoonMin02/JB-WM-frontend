@@ -23,6 +23,8 @@ export interface Proposal {
   kind: string;
   summary: string;
   has_external_effect: boolean;
+  rationale?: string;
+  params?: Record<string, unknown>;
   status: string;
 }
 export interface ActiveNeeds {
@@ -112,6 +114,7 @@ export interface CardBills {
   }[];
   upcoming_card_payment_krw: number;
 }
+export type DetailSnapshot = Record<string, unknown>;
 
 // ── 호출 ──
 export const listCustomers = () => req<Customer[]>("/customers");
@@ -135,9 +138,10 @@ export const getLoanSwitchPrecheck = (cid: string) =>
   req<{ repayment_available?: boolean; prepayment_penalty_krw?: number; note?: string }>(
     `/customers/${cid}/loan-switch-precheck`,
   );
+export const getDetailSnapshot = (cid: string) => req<DetailSnapshot>(`/customers/${cid}/detail-snapshot`);
 
-export const createSession = (cid: string) =>
-  req<Session>(`/customers/${cid}/agent-sessions`, { method: "POST" });
+export const createSession = (cid: string, forceNew = false) =>
+  req<Session>(`/customers/${cid}/agent-sessions${forceNew ? "?force_new=true" : ""}`, { method: "POST" });
 export const getSession = (sid: string) => req<Session>(`/agent-sessions/${sid}`);
 export const postSignal = (sid: string, source: string, payload: Record<string, unknown>) =>
   req<Session>(`/agent-sessions/${sid}/signals`, {
