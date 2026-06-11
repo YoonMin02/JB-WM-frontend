@@ -7,15 +7,20 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init?.headers ?? {}),
   };
-  const res = await fetch(`${BASE}${path}`, {
-    headers,
-    ...init,
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status} ${body}`);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers,
+      ...init,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${res.status} ${body}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    console.error("API fetch error details:", err);
+    throw err;
   }
-  return res.json() as Promise<T>;
 }
 
 // ── 타입 ──
@@ -23,6 +28,12 @@ export interface Customer {
   id: string;
   name: string;
   age_band: string;
+}
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: string;
+  customer_id: string | null;
 }
 export interface Proposal {
   id: string;
@@ -135,6 +146,11 @@ type WorkflowSession = Session & {
 
 // ── 호출 ──
 export const listCustomers = () => req<Customer[]>("/customers");
+export const login = (email: string, password: string) =>
+  req<{ access_token: string; token_type: string; user: AuthUser }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
 export const getInsurance = (cid: string) =>
   req<{
     policies: {
@@ -196,6 +212,23 @@ export const decide = (threadId: string, pid: string, action: "approve" | "rejec
     method: "POST",
     body: JSON.stringify({ decision: action, proposal_id: pid, note }),
   });
+export const getPushPublicKey = () => req<{ public_key: string }>("/push-subscriptions/public-key");
+export const registerPushSubscription = (subscription: PushSubscriptionJSON) =>
+  req<{
+    id: string;
+    customer_id: string | null;
+    endpoint: string;
+    status: string;
+  }>("/push-subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      user_agent: navigator.userAgent,
+      metadata: { app: "frontend-v2" },
+    }),
+  });
+export const sendPushTest = () => req<{ sent: number; reason?: string }>("/push-subscriptions/test", { method: "POST" });
 
 function workflowRecords(session: WorkflowSession): SessionRecords {
   const context = session.recent_context ?? {};
