@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import * as api from "./api";
 import { t } from "./i18n";
+import { enablePushNotifications } from "./push";
 
 type Page = "login" | "main" | "records" | "readiness" | "approvals";
 
@@ -66,8 +68,14 @@ function AppShell({ page }: { page: Page }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [hasCustomerRequest, setHasCustomerRequest] = useState(false);
+  const [pushStatus, setPushStatus] = useState("");
+  const [loginError, setLoginError] = useState("");
 
-  const customers = useQuery({ queryKey: ["customers"], queryFn: api.listCustomers });
+  const customers = useQuery({
+    queryKey: ["customers"],
+    queryFn: api.listCustomers,
+    enabled: page !== "login" || !!localStorage.getItem("jbwm_access_token"),
+  });
   const customer = customers.data?.find((c) => c.id === customerId) ?? null;
   const context = useCustomerContext(customerId);
   const activeSession = useQuery({
@@ -121,14 +129,43 @@ function AppShell({ page }: { page: Page }) {
     qc.invalidateQueries({ queryKey: ["records", nextThreadId] });
   }, [activeSession.data?.thread_id, qc, sid]);
 
-  const login = async (nextCustomer: api.Customer) => {
-    const nextSession = await api.createSession(nextCustomer.id, false);
-    localStorage.setItem("jbwm_customer_id", nextCustomer.id);
-    localStorage.setItem("jbwm_session_id", nextSession.thread_id);
-    setCustomerId(nextCustomer.id);
-    setSid(nextSession.thread_id);
-    qc.clear();
-    navigate("/main");
+  const enablePush = async () => {
+    try {
+      const result = await enablePushNotifications();
+      setPushStatus(result === "enabled" ? "알림이 켜졌어요." : "이 기기에서는 알림을 켤 수 없어요.");
+      if (result === "enabled") {
+        await api.sendPushTest().catch(() => undefined);
+      }
+    } catch (error) {
+      console.warn("push registration failed", error);
+      setPushStatus("알림 연결에 실패했어요.");
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    setLoginError("");
+    try {
+      const auth = await api.login(email, password);
+      if (auth.user.role !== "customer" || !auth.user.customer_id) {
+        throw new Error("고객 계정으로 로그인해 주세요.");
+      }
+      localStorage.setItem("jbwm_access_token", auth.access_token);
+      const visibleCustomers = await api.listCustomers();
+      const nextCustomer = visibleCustomers.find((item) => item.id === auth.user.customer_id);
+      if (!nextCustomer) throw new Error("로그인한 고객 정보를 찾지 못했습니다.");
+      const nextSession = await api.createSession(nextCustomer.id, false);
+      localStorage.setItem("jbwm_customer_id", nextCustomer.id);
+      localStorage.setItem("jbwm_session_id", nextSession.thread_id);
+      setCustomerId(nextCustomer.id);
+      setSid(nextSession.thread_id);
+      qc.clear();
+      navigate("/main");
+      enablePush().catch(() => undefined);
+    } catch (error) {
+      localStorage.removeItem("jbwm_access_token");
+      setLoginError(error instanceof Error ? error.message : "로그인에 실패했습니다.");
+      throw error;
+    }
   };
 
   const logout = () => {
@@ -142,8 +179,8 @@ function AppShell({ page }: { page: Page }) {
     navigate("/login");
   };
 
+  if (page === "login") return <LoginPage error={loginError} onLogin={login} />;
   if (customers.isLoading) return <Centered>{t("loading")}</Centered>;
-  if (page === "login") return <LoginPage customers={customers.data ?? []} onLogin={login} />;
   if (!customer) return <Navigate to="/login" replace />;
   if (!sid) return <Centered>{t("loading")}</Centered>;
   if (page === "records") return <RecordsPage customer={customer} records={records.data} onBack={() => navigate("/main")} />;
@@ -156,7 +193,14 @@ function AppShell({ page }: { page: Page }) {
       <AppHeader
         onMenu={() => setMenuOpen(true)}
       />
-      <MenuPanel open={menuOpen} customer={customer} onClose={() => setMenuOpen(false)} onLogout={logout} />
+      <MenuPanel
+        open={menuOpen}
+        customer={customer}
+        pushStatus={pushStatus}
+        onClose={() => setMenuOpen(false)}
+        onLogout={logout}
+        onEnablePush={enablePush}
+      />
       <DataDetailModal
         open={detailOpen}
         loading={detailSnapshot.isLoading}
@@ -253,30 +297,114 @@ function AppHeader({
   );
 }
 
-function LoginPage({ customers, onLogin }: { customers: api.Customer[]; onLogin: (customer: api.Customer) => void }) {
+function LoginPage({
+  error,
+  onLogin,
+}: {
+  error: string;
+  onLogin: (email: string, password: string) => Promise<void> | void;
+}) {
+  const [email, setEmail] = useState("customer01@jbwm.local");
+  const [password, setPassword] = useState("customer1234");
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState("");
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLocalError("");
+    if (!email.trim() || !password) {
+      setLocalError("아이디와 비밀번호를 입력해 주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onLogin(email.trim(), password);
+    } catch {
+      // AppShell에서 백엔드 오류 메시지를 loginError로 표시합니다.
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="mx-auto min-h-screen max-w-md bg-[#F6F7FB] px-5 py-8">
-      <div className="mb-6">
-        <div className="text-3xl font-extrabold text-[#0A31A8]">JB WM</div>
-        <p className="mt-2 text-base font-semibold leading-relaxed text-[#555]">고객 계정을 선택해 시작합니다.</p>
+    <div className="mx-auto min-h-screen max-w-md bg-gradient-to-b from-[#EEF6FF] via-[#F8FBFF] to-white px-5 py-8">
+      <div className="mb-7">
+        <div className="text-3xl font-extrabold text-[#222]">JB WM</div>
+        <p className="mt-2 text-base font-semibold leading-relaxed text-[#555]">
+          발급된 고객 계정으로 로그인해 주세요.
+        </p>
       </div>
-      <div className="space-y-2">
-        {customers.map((customer) => (
-          <button
-            key={customer.id}
-            onClick={() => onLogin(customer)}
-            className="w-full rounded-xl bg-white p-4 text-left shadow-sm active:bg-[#F0F4FF]"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-lg font-bold text-[#333]">{customer.name}</div>
-                <div className="mt-1 text-xs font-semibold text-[#888]">{customer.age_band} · {shortId(customer.id)}</div>
-              </div>
-              <span className="rounded-full bg-[#EAF0FF] px-3 py-1 text-xs font-bold text-[#0A31A8]">로그인</span>
-            </div>
-          </button>
-        ))}
-      </div>
+
+      <form onSubmit={submit} className="rounded-2xl bg-white p-5 shadow-sm">
+        <label className="block">
+          <span className="text-sm font-extrabold text-[#555]">아이디</span>
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="username"
+            inputMode="email"
+            className="mt-2 w-full rounded-xl border border-[#D5DBE5] bg-white px-4 py-4 text-lg font-bold text-[#222] outline-none focus:border-[#0A31A8]"
+            placeholder="customer01@jbwm.local"
+          />
+        </label>
+        <label className="mt-4 block">
+          <span className="text-sm font-extrabold text-[#555]">비밀번호</span>
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            type="password"
+            className="mt-2 w-full rounded-xl border border-[#D5DBE5] bg-white px-4 py-4 text-lg font-bold text-[#222] outline-none focus:border-[#0A31A8]"
+            placeholder="비밀번호"
+          />
+        </label>
+
+        {(localError || error) && (
+          <p className="mt-4 rounded-xl bg-[#FFF0F0] px-4 py-3 text-sm font-bold leading-relaxed text-[#A11B1B]">
+            {localError || error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="mt-5 w-full rounded-xl bg-[#0A31A8] px-5 py-4 text-lg font-extrabold text-white disabled:cursor-not-allowed disabled:bg-[#AAB6D9]"
+        >
+          {submitting ? "확인 중" : "로그인"}
+        </button>
+      </form>
+
+      <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
+        <p className="text-sm font-extrabold text-[#555]">데모 고객 계정</p>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#777]">
+          백엔드 seed에서 만든 고객 계정 10개를 사용할 수 있습니다. 비밀번호는 모두 같습니다.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((index) => {
+            const account = `customer${String(index).padStart(2, "0")}@jbwm.local`;
+            return (
+              <button
+                key={account}
+                type="button"
+                onClick={() => {
+                  setEmail(account);
+                  setPassword("customer1234");
+                  setLocalError("");
+                }}
+                className="rounded-xl border border-[#EDF0F5] bg-[#F8FAFF] px-3 py-3 text-left text-xs font-extrabold text-[#0A31A8] active:bg-[#EAF0FF]"
+              >
+                {account}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 rounded-xl bg-[#F6F7FB] px-4 py-3 text-sm font-bold text-[#666]">
+          공통 비밀번호: <span className="text-[#222]">customer1234</span>
+        </div>
+        <p className="mt-3 text-xs font-semibold leading-relaxed text-[#888]">
+          운영자 계정은 고객용 화면에서 허용하지 않습니다. 운영자 화면에서는 별도 로그인 흐름을 사용합니다.
+        </p>
+      </section>
     </div>
   );
 }
@@ -781,13 +909,17 @@ function RecordsPage({
 function MenuPanel({
   open,
   customer,
+  pushStatus,
   onClose,
   onLogout,
+  onEnablePush,
 }: {
   open: boolean;
   customer: api.Customer;
+  pushStatus: string;
   onClose: () => void;
   onLogout: () => void;
+  onEnablePush: () => void;
 }) {
   if (!open) return null;
   return (
@@ -806,7 +938,8 @@ function MenuPanel({
         <div className="mt-6 space-y-2">
           <MenuButton onClick={onLogout}>로그아웃</MenuButton>
           <MenuButton>설정</MenuButton>
-          <MenuButton>알림</MenuButton>
+          <MenuButton onClick={onEnablePush}>알림 켜기</MenuButton>
+          {pushStatus && <p className="px-2 text-sm font-bold text-[#0A31A8]">{pushStatus}</p>}
           <MenuButton>서류함</MenuButton>
           <MenuButton>상담 예약</MenuButton>
         </div>

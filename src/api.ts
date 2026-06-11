@@ -24,6 +24,12 @@ export interface Customer {
   name: string;
   age_band: string;
 }
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: string;
+  customer_id: string | null;
+}
 export interface Proposal {
   id: string;
   kind: string;
@@ -135,6 +141,11 @@ type WorkflowSession = Session & {
 
 // ── 호출 ──
 export const listCustomers = () => req<Customer[]>("/customers");
+export const login = (email: string, password: string) =>
+  req<{ access_token: string; token_type: string; user: AuthUser }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
 export const getInsurance = (cid: string) =>
   req<{
     policies: {
@@ -196,6 +207,23 @@ export const decide = (threadId: string, pid: string, action: "approve" | "rejec
     method: "POST",
     body: JSON.stringify({ decision: action, proposal_id: pid, note }),
   });
+export const getPushPublicKey = () => req<{ public_key: string }>("/push-subscriptions/public-key");
+export const registerPushSubscription = (subscription: PushSubscriptionJSON) =>
+  req<{
+    id: string;
+    customer_id: string | null;
+    endpoint: string;
+    status: string;
+  }>("/push-subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      user_agent: navigator.userAgent,
+      metadata: { app: "frontend-v2" },
+    }),
+  });
+export const sendPushTest = () => req<{ sent: number; reason?: string }>("/push-subscriptions/test", { method: "POST" });
 
 function workflowRecords(session: WorkflowSession): SessionRecords {
   const context = session.recent_context ?? {};

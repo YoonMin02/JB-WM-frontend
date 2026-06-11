@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "JB WM",
+  "short_name": "JB WM",
+  "description": "건강과 자산 변화를 함께 살피는 JB WM 도우미",
+  "start_url": "/main",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fbff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/jbwm-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
