@@ -1,8 +1,14 @@
-const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const BASE = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_BASE ?? "";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem("jbwm_access_token");
+  const headers = {
+    ...(init?.body ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers ?? {}),
+  };
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...init,
   });
   if (!res.ok) {
@@ -23,6 +29,8 @@ export interface Proposal {
   kind: string;
   summary: string;
   has_external_effect: boolean;
+  rationale?: string;
+  params?: Record<string, unknown>;
   status: string;
 }
 export interface ActiveNeeds {
@@ -30,6 +38,7 @@ export interface ActiveNeeds {
   needs?: Record<string, "none" | "low" | "mid" | "high" | string>;
 }
 export interface Session {
+  thread_id: string;
   session_id: string;
   customer_id: string;
   state: string;
@@ -44,6 +53,12 @@ export interface Session {
   } | null;
   recent_context: Record<string, unknown>;
   failure_reason: string | null;
+  messages?: SessionRecords["messages"];
+  proposals?: Proposal[];
+  events?: AgentEvent[];
+  executions?: Record<string, unknown>[];
+  snapshots?: Record<string, unknown>[];
+  agent_jobs?: Record<string, unknown>[];
 }
 export interface AgentEvent {
   type: string;
@@ -112,10 +127,24 @@ export interface CardBills {
   }[];
   upcoming_card_payment_krw: number;
 }
+export type DetailSnapshot = Record<string, unknown>;
+
+type WorkflowSession = Session & {
+  graph_result?: Record<string, unknown>;
+};
 
 // ── 호출 ──
 export const listCustomers = () => req<Customer[]>("/customers");
-export const getInsurance = (cid: string) => req<{ gaps_hint: string | null }>(`/customers/${cid}/insurance`);
+export const getInsurance = (cid: string) =>
+  req<{
+    policies: {
+      product_name: string;
+      type: string;
+      active: boolean;
+      coverages: { coverage_type: string; limit: number; active: boolean }[];
+    }[];
+    gaps_hint: string | null;
+  }>(`/customers/${cid}/insurance`);
 export const getPortfolio = (cid: string) =>
   req<{ high_risk_weight: number; total_value: number }>(`/customers/${cid}/portfolio`);
 export const getMemory = (cid: string) =>
@@ -135,21 +164,93 @@ export const getLoanSwitchPrecheck = (cid: string) =>
   req<{ repayment_available?: boolean; prepayment_penalty_krw?: number; note?: string }>(
     `/customers/${cid}/loan-switch-precheck`,
   );
+export const getDetailSnapshot = (cid: string) => req<DetailSnapshot>(`/customers/${cid}/detail-snapshot`);
 
-export const createSession = (cid: string) =>
-  req<Session>(`/customers/${cid}/agent-sessions`, { method: "POST" });
-export const getSession = (sid: string) => req<Session>(`/agent-sessions/${sid}`);
-export const postSignal = (sid: string, source: string, payload: Record<string, unknown>) =>
-  req<Session>(`/agent-sessions/${sid}/signals`, {
+export const createSession = (cid: string, forceNew = false) =>
+  req<WorkflowSession>(`/customers/${cid}/workflow-sessions${forceNew ? "?force_new=true" : ""}`, { method: "POST" });
+export const getSession = (threadId: string) => req<WorkflowSession>(`/workflow-sessions/${threadId}`);
+export const postSignal = (threadId: string, source: string, payload: Record<string, unknown>) =>
+  req<WorkflowSession>(`/workflow-sessions/${threadId}/events`, {
     method: "POST",
     body: JSON.stringify({ source, payload }),
   });
-export const getProposals = (sid: string) =>
-  req<{ proposals: Proposal[] }>(`/agent-sessions/${sid}/proposals`);
-export const getEvents = (sid: string) => req<{ events: AgentEvent[] }>(`/agent-sessions/${sid}/events`);
-export const getRecords = (sid: string) => req<SessionRecords>(`/agent-sessions/${sid}/records`);
-export const decide = (pid: string, action: "approve" | "reject" | "revise", note = "") =>
-  req<Session>(`/proposals/${pid}/${action}`, {
+export const postMessage = (threadId: string, text: string) =>
+  req<WorkflowSession>(`/workflow-sessions/${threadId}/messages`, {
     method: "POST",
-    body: action === "revise" ? JSON.stringify({ note }) : undefined,
+    body: JSON.stringify({ text }),
   });
+export const getProposals = async (threadId: string) => {
+  const session = await getSession(threadId);
+  return { proposals: session.proposals ?? [] };
+};
+export const getEvents = async (threadId: string) => {
+  const session = await getSession(threadId);
+  return { events: session.events ?? [] };
+};
+export const getRecords = async (threadId: string): Promise<SessionRecords> => {
+  const session = await getSession(threadId);
+  return workflowRecords(session);
+};
+export const decide = (threadId: string, pid: string, action: "approve" | "reject" | "revise", note = "") =>
+  req<WorkflowSession>(`/workflow-sessions/${threadId}/decisions`, {
+    method: "POST",
+    body: JSON.stringify({ decision: action, proposal_id: pid, note }),
+  });
+
+function workflowRecords(session: WorkflowSession): SessionRecords {
+  const context = session.recent_context ?? {};
+  const assessment = asRecord(context.assessment);
+  const plan = asRecord(context.plan);
+  const events = session.events ?? [];
+
+  return {
+    messages: session.messages ?? [],
+    need_assessments: assessment
+      ? [
+          {
+            primary_need: stringValue(assessment.primary_need, "none"),
+            needs: Object.fromEntries(
+              [
+                "medical_cost_need",
+                "insurance_need",
+                "cashflow_need",
+                "asset_defense_need",
+                "investment_adjust_need",
+                "life_plan_need",
+              ].map((key) => [key, stringValue(assessment[key], "none")]),
+            ),
+            confidence: numberValue(assessment.confidence, 0),
+            rationale: stringValue(assessment.rationale, ""),
+            raw_output: assessment,
+            created_at: latestEventAt(events, "policy") ?? latestEventAt(events, "graph_state") ?? new Date().toISOString(),
+          },
+        ]
+      : [],
+    plans: plan
+      ? [
+          {
+            explanation: stringValue(plan.explanation, ""),
+            raw_output: plan,
+            proposal_ids: (session.proposals ?? []).map((proposal) => proposal.id),
+            created_at: latestEventAt(events, "policy") ?? latestEventAt(events, "agent_job") ?? new Date().toISOString(),
+          },
+        ]
+      : [],
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
+}
+
+function latestEventAt(events: AgentEvent[], type: string): string | null {
+  return [...events].reverse().find((event) => event.type === type)?.created_at ?? null;
+}

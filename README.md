@@ -10,70 +10,82 @@ React 기반 워크스페이스로, 고객(주 타깃: 고령층)이 자신의 *
 
 ## 핵심 화면
 
-챗 UI가 본질이 아닙니다. 본질은 **고객의 회복탄력성 상태를 시각화**하는 것입니다.
+챗 UI가 본질이 아닙니다. 첫 화면의 목적은 고객이 들어오자마자
+**내가 지금 얼마나 준비되어 있는지**를 이해하고 안심하는 것입니다.
 
 ```mermaid
 flowchart TB
     subgraph FE["프론트엔드"]
-        DASH["① Agent Dashboard<br/>상태 기반 UI"]
-        NEED["② Need Assessment<br/>통합 필요도"]
-        DATA["③ Financial Context<br/>mock 금융 컨텍스트"]
-        RECORD["④ Records<br/>전문·판단·계획 저장 이력"]
-        APPROVE["⑤ Approval Cards<br/>액션 1건 승인"]
+        MAIN["① Main<br/>종합 대비점수"]
+        CHAT["② Chat<br/>JB도우미와 대화"]
+        STATUS["③ Simple Progress<br/>분석중·승인대기·완료"]
+        DETAIL["④ Readiness Detail<br/>자산·현금·의료비·보험"]
+        APPROVE["⑤ Approval Page<br/>proposal별 승인"]
+        RECORD["⑥ Records<br/>전문·판단·계획 저장 이력"]
     end
     BE[(백엔드 API)]
-    DASH --> BE
-    NEED --> BE
-    DATA --> BE
-    RECORD --> BE
+    MAIN --> BE
+    CHAT --> BE
+    STATUS --> BE
+    DETAIL --> BE
     APPROVE --> BE
+    RECORD --> BE
 ```
 
-### ① Agent Dashboard (상태 기반)
-```
-현재 상태:
-- 건강 리스크: 상승
-- 현금흐름 위험: 중간
-- 보험 공백: 존재
-- 투자 위험도: 과다
+### ① Main
 
-통합 필요도:
-- 의료비 / 보험 / 현금흐름 / 자산방어 / 투자전략 / 생애설계
+메인에서는 기존의 `통합 필요도`, `금융 컨텍스트`, `상황 시뮬레이션`을 노출하지 않습니다.
+고객에게는 내부 판단 항목보다 “현재 대비가 충분한가”가 먼저 보이도록 합니다.
 
-Agent 권장 액션:
-[보험 보장 분석]  [현금흐름 플랜 생성]  [승인 필요 액션]
 ```
-
-### ② Need Assessment
-```
-primary_need: cashflow
-cashflow_need: high
-asset_defense_need: high
-insurance_need: mid
-```
-고객이 직접 분류하지 않아도 백엔드의 `AssessNeed` 결과를 막대/라벨로 표시합니다.
-
-### ③ Financial Context
-```
-출금가능 현금 / 월 지출 / 카드 결제 / 대출 상환
-최근 의료비 / 거래 기록 수 / 대출이동 사전조회
-```
-API body shape 기반 mock 금융 데이터를 고객이 확인할 수 있게 보여줍니다.
-
-### ④ Records / Timeline
-```
-Timeline:
-- 신호 감지 → 필요도 평가 → 계획 생성 → 승인 대기
-
-Records:
-- AgentMessage
-- NeedAssessmentRecord
-- PlanRecord
+나의 종합 대비 상태:
+- 앞으로의 건강·자산 변화 대비율
+- 현금 여유 / 의료 대비 / 보험 상태 요약
+- JB도우미와 대화
+- 고객용 진행 상태
+- 도우미 제안 목록
 ```
 
-### ⑤ Approval Cards
-- 외부 효과가 있는 액션(예약·청구·가입·송금·포트폴리오 변경)은 **그 액션 1건에 대해서만** 승인.
-- 승인/거절/수정 버튼. 백엔드가 유효 행동을 내려주고, 프론트는 그것만 노출.
+### ② Chat
+
+고객 입력은 카카오톡 친구와 대화하는 느낌의 채팅 화면에서 받습니다. 빠른 선택
+버튼은 채팅창 위에 노출되지만, 본질은 버튼형 폼이 아니라 대화입니다.
+
+선택 또는 입력 결과는 `/workflow-sessions/{thread_id}/messages`로 전달합니다.
+고객 프론트는 operator 전용 event trigger API를 호출하지 않습니다.
+
+### ③ Simple Progress
+
+고객에게 내부 LangGraph node를 그대로 보여주지 않고 다음 3단계로 단순화합니다.
+
+```text
+고객님의 응답 분석중 ─ 승인 대기 ─ 실행 및 기록 완료
+```
+
+세션과 records는 polling으로 갱신하므로 operator 화면에서 이벤트를 발생시켜 제안이
+생기면 고객 화면에도 새로고침 없이 표시됩니다.
+
+### ④ Readiness Detail
+
+```
+보유자산 / 현금유동성 / 의료비 대비 / 보험 대비 / 악화 시 추가 부담
+```
+이 화면의 점수는 고객 이해를 돕는 참고 지표입니다. 최종 agent 판단은 백엔드
+workflow와 agent job 결과를 따른다. 원천값은 `자세히 보기`에서 확인합니다.
+
+### ⑤ Approval Page
+
+승인이 필요한 제안은 메인에서 바로 실행하지 않고 `/approvals`에서 크게 보여줍니다.
+
+```
+승인 / 거절 / 나중에
+```
+`나중에`는 결정을 보내지 않고 메인으로 돌아갑니다. 제안 목록에서 다시 승인 화면으로
+들어갈 수 있습니다.
+
+### ⑥ Records
+
+진행 내역과 저장된 대화·판단·계획 전문은 보조 화면에서 확인합니다.
 
 ---
 
@@ -85,10 +97,10 @@ sequenceDiagram
     participant FE as 프론트
     participant BE as 백엔드
 
-    BE-->>FE: 세션 상태 = UserApproval<br/>pending_proposal + allowed_actions
-    FE->>U: 액션 카드 표시 (요약 + 근거)
+    BE-->>FE: 세션 상태 = UserApproval<br/>proposals + allowed_actions
+    FE->>U: 승인 필요 액션 카드들을 표시 (요약 + 근거)
     U->>FE: 승인
-    FE->>BE: POST /proposals/{id}/approve
+    FE->>BE: POST /workflow-sessions/{thread_id}/decisions
     BE-->>FE: 최종 Session 객체
     Note over BE: Executor가 실행 (LLM 미경유) 후 Monitoring 복귀
 ```
@@ -105,7 +117,7 @@ sequenceDiagram
 | Bundler         | Vite                               |
 | Styling         | Tailwind CSS (JB brand tokens)     |
 | UI              | 자체 컴포넌트 (Tailwind utility)   |
-| Routing         | 단일 화면 (`/`)                    |
+| Routing         | React Router (`/login`, `/main`, `/records`) |
 | Server state    | TanStack Query                     |
 | Local UI state  | React `useState`                   |
 | Forms           | 현재 없음                          |
@@ -118,7 +130,6 @@ sequenceDiagram
 아래 라이브러리는 README 초안의 계획에는 있었지만 현재 `package.json`에는 없습니다.
 도입 전까지 구현/문서에서 실제 의존성처럼 취급하지 않습니다.
 
-- React Router
 - Zustand
 - shadcn/ui
 - React Hook Form / Zod
@@ -134,21 +145,25 @@ sequenceDiagram
 
 - 큰 글씨 / 높은 대비 / 넉넉한 터치 영역
 - 쉬운 용어 (전문 금융/의료 용어 풀어쓰기)
-- 명확한 단일 액션 승인 (한 번에 하나)
-- 진행 상황의 시각적 타임라인
+- 명확한 proposal별 승인 (한 카드가 한 실행 단위)
+- 분석중·승인대기·완료로 단순화한 진행 상태
 - (확장) 음성 입력·읽어주기
 
 ---
 
 ## 주요 라우트
 
-현재는 React Router를 쓰지 않는 단일 화면 앱입니다.
+현재는 React Router로 페이지를 나눕니다.
 
 | 화면 | 용도 |
 |---|---|
-| `/` | 고객 상태, 통합 필요도, 금융 컨텍스트, 제안, 타임라인, 저장 기록 |
+| `/login` | mock 고객 선택 로그인 |
+| `/main` | 종합 대비점수, JB도우미 채팅, 고객용 진행 상태, 도우미 제안 목록 |
+| `/readiness` | 자산·현금유동성·의료비·보험·악화 대비 상세 |
+| `/approvals` | 승인 필요한 제안을 크게 확인하고 승인/거절/나중에 선택 |
+| `/records` | 저장된 판단 기록/전문/계획 전체 보기 |
 
-후속으로 라우터를 도입하면 `/dashboard`, `/timeline`, `/chat`, `/proposals/:id`, `/settings`를 분리할 수 있습니다.
+루트(`/`)는 `/main`으로 보냅니다. 로그인되지 않은 상태에서 `/main` 또는 `/records`에 접근하면 `/login`으로 보냅니다.
 
 ---
 
@@ -178,7 +193,7 @@ corepack enable && corepack prepare pnpm@latest --activate
 
 **clone 후 그대로 실행** (프로젝트는 이미 스캐폴드되어 있음):
 ```bash
-pnpm install      # 의존성 설치 (esbuild 빌드 승인은 pnpm-workspace.yaml에 포함 → 자동)
+pnpm install      # package.json/pnpm-lock.yaml 기준 의존성 설치
 pnpm dev          # http://localhost:5173
 pnpm build        # 프로덕션 빌드 (tsc + vite)
 ```
