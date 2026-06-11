@@ -319,7 +319,8 @@ function LoginPage({
     setSubmitting(true);
     try {
       await onLogin(email.trim(), password);
-    } catch {
+    } catch (err) {
+      console.error("Login submit error:", err);
       // AppShell에서 백엔드 오류 메시지를 loginError로 표시합니다.
     } finally {
       setSubmitting(false);

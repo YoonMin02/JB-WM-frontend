@@ -7,15 +7,20 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init?.headers ?? {}),
   };
-  const res = await fetch(`${BASE}${path}`, {
-    headers,
-    ...init,
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status} ${body}`);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers,
+      ...init,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${res.status} ${body}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    console.error("API fetch error details:", err);
+    throw err;
   }
-  return res.json() as Promise<T>;
 }
 
 // ── 타입 ──
