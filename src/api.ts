@@ -190,10 +190,10 @@ export const postSignal = (threadId: string, source: string, payload: Record<str
     method: "POST",
     body: JSON.stringify({ source, payload }),
   });
-export const postMessage = (threadId: string, text: string) =>
+export const postMessage = (threadId: string, text: string, kind?: string, choicePath?: string[]) =>
   req<WorkflowSession>(`/workflow-sessions/${threadId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, kind, choice_path: choicePath }),
   });
 export const getProposals = async (threadId: string) => {
   const session = await getSession(threadId);
