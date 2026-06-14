@@ -1,216 +1,255 @@
-# JB WM — Frontend
+# JB든든 AI매니저 Frontend
 
-> **JB WM Agent** 프론트엔드. 건강·자산을 하나의 **회복탄력성 상태**로 보는 능동형 lifelong WM 에이전트의 **고객 대면 인터페이스**입니다.
+JB든든 AI매니저 Frontend는 고객이 로그인해서 자신의 건강/자산 대비 상태를 보고, JB든든
+채팅 선택지 또는 자유 입력으로 workflow를 시작하고, 승인 필요한 제안을 승인/거절/수정하는
+React 고객 화면이다.
 
-React 기반 워크스페이스로, 고객(주 타깃: 고령층)이 자신의 **회복탄력성 상태**(건강+자산 통합)와 에이전트의 판단·제안을 보고, 민감한 액션을 **승인/거절/수정**하는 화면을 제공합니다. 백엔드 상태를 렌더링하고 의도를 제출할 뿐, 비즈니스 결정이나 에이전트 권한을 소유하지 않습니다.
+프론트는 비즈니스 판단이나 실행 권한을 갖지 않는다. 백엔드 상태를 렌더링하고,
+사용자 선택을 `/workflow-sessions/{thread_id}/messages`로 전달하며, 승인 결정은
+`/workflow-sessions/{thread_id}/decisions`로 보낸다.
 
-> 제품 개념의 정본은 백엔드 [`docs/01_PRODUCT_CONTEXT.md`](../JB-WM-backend/docs/01_PRODUCT_CONTEXT.md). 핵심: 건강·자산 통합 / 자산 변동 선제 감지 / 지불의향 개인화 / 의료 권고는 생성하지 않음(재무·통계참고·연결만).
+## 실행
 
----
+백엔드를 먼저 로컬에서 띄운다.
 
-## 핵심 화면
-
-챗 UI가 본질이 아닙니다. 첫 화면의 목적은 고객이 들어오자마자
-**내가 지금 얼마나 준비되어 있는지**를 이해하고 안심하는 것입니다.
-
-```mermaid
-flowchart TB
-    subgraph FE["프론트엔드"]
-        MAIN["① Main<br/>종합 대비점수"]
-        CHAT["② Chat<br/>JB도우미와 대화"]
-        STATUS["③ Simple Progress<br/>분석중·승인대기·완료"]
-        DETAIL["④ Readiness Detail<br/>자산·현금·의료비·보험"]
-        APPROVE["⑤ Approval Page<br/>proposal별 승인"]
-        RECORD["⑥ Records<br/>전문·판단·계획 저장 이력"]
-    end
-    BE[(백엔드 API)]
-    MAIN --> BE
-    CHAT --> BE
-    STATUS --> BE
-    DETAIL --> BE
-    APPROVE --> BE
-    RECORD --> BE
+```bash
+cd /home/tomasyms/JB-WM/JB-WM-backend
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### ① Main
+프론트 실행:
 
-메인에서는 기존의 `통합 필요도`, `금융 컨텍스트`, `상황 시뮬레이션`을 노출하지 않습니다.
-고객에게는 내부 판단 항목보다 “현재 대비가 충분한가”가 먼저 보이도록 합니다.
-
-```
-나의 종합 대비 상태:
-- 앞으로의 건강·자산 변화 대비율
-- 현금 여유 / 의료 대비 / 보험 상태 요약
-- JB도우미와 대화
-- 고객용 진행 상태
-- 도우미 제안 목록
+```bash
+cd /home/tomasyms/JB-WM/JB-WM-frontend-v2
+pnpm install
+pnpm dev
 ```
 
-### ② Chat
-
-고객 입력은 카카오톡 친구와 대화하는 느낌의 채팅 화면에서 받습니다. 빠른 선택
-버튼은 채팅창 위에 노출되지만, 본질은 버튼형 폼이 아니라 대화입니다.
-
-선택 또는 입력 결과는 `/workflow-sessions/{thread_id}/messages`로 전달합니다.
-고객 프론트는 operator 전용 event trigger API를 호출하지 않습니다.
-
-### ③ Simple Progress
-
-고객에게 내부 LangGraph node를 그대로 보여주지 않고 다음 3단계로 단순화합니다.
+브라우저:
 
 ```text
-고객님의 응답 분석중 ─ 승인 대기 ─ 실행 및 기록 완료
+http://127.0.0.1:5173
 ```
 
-세션과 records는 polling으로 갱신하므로 operator 화면에서 이벤트를 발생시켜 제안이
-생기면 고객 화면에도 새로고침 없이 표시됩니다.
+API 주소는 `.env`의 `VITE_API_BASE_URL`이 우선이다.
 
-### ④ Readiness Detail
-
-```
-보유자산 / 현금유동성 / 의료비 대비 / 보험 대비 / 악화 시 추가 부담
-```
-이 화면의 점수는 고객 이해를 돕는 참고 지표입니다. 최종 agent 판단은 백엔드
-workflow와 agent job 결과를 따른다. 원천값은 `자세히 보기`에서 확인합니다.
-
-### ⑤ Approval Page
-
-승인이 필요한 제안은 메인에서 바로 실행하지 않고 `/approvals`에서 크게 보여줍니다.
-
-```
-승인 / 거절 / 나중에
-```
-`나중에`는 결정을 보내지 않고 메인으로 돌아갑니다. 제안 목록에서 다시 승인 화면으로
-들어갈 수 있습니다.
-
-### ⑥ Records
-
-진행 내역과 저장된 대화·판단·계획 전문은 보조 화면에서 확인합니다.
-
----
-
-## 승인 흐름 (프론트 관점)
-
-```mermaid
-sequenceDiagram
-    participant U as 고객
-    participant FE as 프론트
-    participant BE as 백엔드
-
-    BE-->>FE: 세션 상태 = UserApproval<br/>proposals + allowed_actions
-    FE->>U: 승인 필요 액션 카드들을 표시 (요약 + 근거)
-    U->>FE: 승인
-    FE->>BE: POST /workflow-sessions/{thread_id}/decisions
-    BE-->>FE: 최종 Session 객체
-    Note over BE: Executor가 실행 (LLM 미경유) 후 Monitoring 복귀
+```dotenv
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-프론트는 **유효 전이를 독자 판단하지 않습니다.** 백엔드 응답의 `allowed_actions`만 렌더링합니다.
+`src/api.ts`는 하위 호환으로 `VITE_API_BASE`도 읽지만, 현재 기준 env 이름은
+`VITE_API_BASE_URL`이다.
 
----
+## 로그인과 세션
 
-## 기술 스택
+현재 고객 화면은 고객 계정 로그인을 전제로 한다.
 
-| Layer           | Library / Tool                     |
-| --------------- | ---------------------------------- |
-| Framework       | React 19 + TypeScript              |
-| Bundler         | Vite                               |
-| Styling         | Tailwind CSS (JB brand tokens)     |
-| UI              | 자체 컴포넌트 (Tailwind utility)   |
-| Routing         | React Router (`/login`, `/main`, `/records`) |
-| Server state    | TanStack Query                     |
-| Local UI state  | React `useState`                   |
-| Forms           | 현재 없음                          |
-| Tables / Charts | 현재 없음                          |
-| i18n            | `src/i18n.ts` 최소 dict            |
-| Package manager | pnpm                               |
+```text
+customer01@jbwm.local / customer1234
+customer02@jbwm.local / customer1234
+...
+```
 
-### Planned / Not Installed
+로그인 성공 시 localStorage에 다음 값을 저장한다.
 
-아래 라이브러리는 README 초안의 계획에는 있었지만 현재 `package.json`에는 없습니다.
-도입 전까지 구현/문서에서 실제 의존성처럼 취급하지 않습니다.
+```text
+jbwm_access_token
+jbwm_customer_id
+jbwm_session_id
+```
 
-- Zustand
-- shadcn/ui
-- React Hook Form / Zod
-- TanStack Table
-- Recharts
-- react-i18next
+`jbwm_session_id`는 백엔드의 `AgentThread.graph_thread_id`다. Codex CLI 세션 id가
+아니며, 같은 고객의 active workflow thread를 조회하기 위한 opaque id다.
 
----
-
-## 고령층 UX 원칙 (차별점)
-
-주 타깃이 고령층이므로 다음이 **핵심 차별점**입니다 (평가 5.1):
-
-- 큰 글씨 / 높은 대비 / 넉넉한 터치 영역
-- 쉬운 용어 (전문 금융/의료 용어 풀어쓰기)
-- 명확한 proposal별 승인 (한 카드가 한 실행 단위)
-- 분석중·승인대기·완료로 단순화한 진행 상태
-- (확장) 음성 입력·읽어주기
-
----
+로그아웃은 localStorage 값을 지우고 `/login`으로 이동한다.
 
 ## 주요 라우트
 
-현재는 React Router로 페이지를 나눕니다.
-
-| 화면 | 용도 |
+| Route | 역할 |
 |---|---|
-| `/login` | mock 고객 선택 로그인 |
-| `/main` | 종합 대비점수, JB도우미 채팅, 고객용 진행 상태, 도우미 제안 목록 |
-| `/readiness` | 자산·현금유동성·의료비·보험·악화 대비 상세 |
-| `/approvals` | 승인 필요한 제안을 크게 확인하고 승인/거절/나중에 선택 |
-| `/records` | 저장된 판단 기록/전문/계획 전체 보기 |
+| `/login` | 고객 계정 로그인 |
+| `/main` | 종합 대비 상태, JB든든 채팅, 진행 상태, 제안/기록 요약 |
+| `/readiness` | 자산, 현금유동성, 의료비, 보험, 악화 시 부담 상세 |
+| `/approvals` | 승인 필요한 proposal을 크게 보고 승인/거절/나중에 선택 |
+| `/records` | 저장된 대화, 판단, 계획 기록 전체 보기 |
 
-루트(`/`)는 `/main`으로 보냅니다. 로그인되지 않은 상태에서 `/main` 또는 `/records`에 접근하면 `/login`으로 보냅니다.
+루트(`/`)와 알 수 없는 경로는 `/main`으로 보낸다. 로그인되지 않은 상태에서는
+`/login`으로 이동한다.
 
----
+## 채팅 선택지와 Signal Kind
 
-## 상태 관리 정책
+JB든든 선택지는 단계형 트리다. 사용자가 마지막 선택지를 누르면 프론트는 화면에
+보이는 선택 경로와 함께 `kind`, `choice_path`를 백엔드로 보낸다.
 
-- **서버 상태 = TanStack Query** (세션 상태, proposal, 이벤트, 도메인 데이터)
-- **로컬 UI 상태 = React `useState`** (현재 session id 등)
-- **Zustand = planned** (사이드바, 탭 등 복잡한 UI 상태가 생길 때만)
-- 백엔드에서 파생 가능한 데이터를 Zustand에 중복 저장하지 않음
-
----
-
-## i18n
-
-- 기본 `ko`. 현재는 `src/i18n.ts`의 최소 `t()` (ko dict). en은 dict만 추가하면 동작 (구조 대비).
-- 문자열 하드코딩 금지 — `t("...")` 사용.
-- 규모가 커지면 `react-i18next`로 확장.
-
----
-
-## 개발
-
-전제: Node LTS(nvm) + pnpm. 시스템에 pnpm이 없으면 한 번만:
-```bash
-corepack enable && corepack prepare pnpm@latest --activate
+```json
+{
+  "text": "금융 변동 사항이 있어요 > 투자 손실이 걱정돼요 > 최근 투자 손실이 커졌어요",
+  "kind": "portfolio_loss",
+  "choice_path": [
+    "금융 변동 사항이 있어요",
+    "투자 손실이 걱정돼요",
+    "최근 투자 손실이 커졌어요"
+  ]
+}
 ```
 
-**clone 후 그대로 실행** (프로젝트는 이미 스캐폴드되어 있음):
-```bash
-pnpm install      # package.json/pnpm-lock.yaml 기준 의존성 설치
-pnpm dev          # http://localhost:5173
-pnpm build        # 프로덕션 빌드 (tsc + vite)
+이 `kind`는 LLM이 추론하는 값이 아니다. 프론트 선택지에 하드 매핑된 입력 분류값이고,
+백엔드 `SignalDetect`는 이 값을 signal kind로 사용한다. 자유 입력처럼 kind가 없는
+메시지는 백엔드에서 `routine_check`로 처리된다.
+
+현재 선택지에서 보내는 signal kind:
+
+```text
+health_deterioration
+medical_spending_spike
+income_drop
+spending_spike
+repayment_pressure
+portfolio_loss
+upcoming_card_payment_pressure
+insurance_policy_change
+insurance_gap
+non_financial_asset_change
+routine_check
+preference_update
 ```
 
-> 프론트는 백엔드 API(:8000)를 호출합니다. **백엔드를 먼저 띄우세요**:
-> `cd ../JB-WM-backend && source .venv/bin/activate && uvicorn app.main:app --reload`
-> (백엔드 셋업·실행은 ../JB-WM-backend의 `docs/SETUP.md`, `docs/RUNBOOK.md` 참고)
->
-> API 주소는 `VITE_API_BASE` 환경변수로 바꿀 수 있어요 (기본 `http://localhost:8000`).
+치매/인지저하 진단 선택지는 `health_deterioration`으로 들어간다. 앱이 치매를 추론하거나
+진단하는 구조가 아니라, 고객이 선택한 건강 상태 변화 이벤트를 재무/보험/현금흐름
+준비 관점에서 검토하도록 signal을 보내는 구조다.
 
----
+## 승인 흐름
 
-## 디자인
+백엔드 proposal에는 별도의 proposal kind가 있다.
 
-JB금융그룹 공식 사이트에서 추출한 브랜드 토큰을 사용합니다.
+```text
+book_hospital
+review_insurance
+cashflow_plan
+rebalance_portfolio
+notify
+report
+```
 
-- `tailwind.config.ts` — 색상·타이포·레이아웃 토큰 (커밋됨)
-- `docs/JB_BRAND_DESIGN.md` — 전체 디자인 레퍼런스 (커밋됨)
+signal kind와 proposal kind는 다르다. 예를 들어 사용자가 `portfolio_loss` 선택지를
+눌러도 Codex CLI가 만든 proposal은 `report`, `cashflow_plan`, `rebalance_portfolio`
+등이 될 수 있다.
 
-주요 토큰: Primary `#0A31A8`, Accent `#1C56FF`, 본문 `#333333`, 폰트 SUIT Variable.
+승인 필요한 proposal은 두 곳에 표시된다.
+
+- 채팅창 안의 승인 bubble
+- `/approvals` 페이지
+
+현재 프론트의 채팅 bubble은 `has_external_effect && status === "proposed"`인 proposal을
+승인 대상으로 보여준다. 백엔드 세션 상태가 `UserApproval`이면 `allowed_actions`는
+`approve`, `reject`, `revise`다.
+
+주의할 점:
+
+- `notify`가 `has_external_effect=false`로 오면 현재 백엔드 정책상 자동 실행될 수 있다.
+- 담당자/보호자/외부 채널 알림을 무조건 승인 대상으로 만들려면 백엔드 정책 확장이 필요하다.
+
+## Polling과 네트워크 요청
+
+현재 화면은 TanStack Query polling으로 백엔드 상태를 갱신한다.
+
+```text
+POST /customers/{customer_id}/workflow-sessions  every 2.5s
+GET  /workflow-sessions/{thread_id}              every 2.5s
+records 조회                                    every 3.5s
+```
+
+그래서 DevTools Network에 몇 초마다 요청이 보이는 것은 정상이다. 문제로 봐야 하는 것은
+요청 자체가 아니라 다음 상황이다.
+
+- 같은 고객인데 계속 다른 `thread_id`가 생김
+- `GET /workflow-sessions/{thread_id}`가 반복적으로 404
+- 로그인 고객과 다른 customer id의 데이터가 보임
+
+## 데이터 조회
+
+메인/상세 화면은 다음 백엔드 API를 조회한다.
+
+```text
+GET /customers
+GET /customers/{customer_id}/portfolio
+GET /customers/{customer_id}/insurance
+GET /customers/{customer_id}/memory
+GET /customers/{customer_id}/health
+GET /customers/{customer_id}/accounts
+GET /customers/{customer_id}/transactions
+GET /customers/{customer_id}/card-bills
+GET /customers/{customer_id}/loans
+GET /customers/{customer_id}/loan-switch-precheck
+GET /customers/{customer_id}/detail-snapshot
+```
+
+프론트의 대비 점수는 고객 이해를 돕는 표시용 계산이다. 최종 agent 판단과 제안은
+백엔드 workflow의 `NeedAssessment`, `Plan`, `ActionProposal` 결과를 따른다.
+
+## Push/PWA 상태
+
+프론트에는 service worker 등록과 Web Push 구독 시도 코드가 있다.
+
+현재 백엔드 구현은 subscription 등록/조회/해제 API까지만 있다.
+
+```text
+POST   /push-subscriptions
+GET    /push-subscriptions
+DELETE /push-subscriptions/{subscription_id}
+```
+
+반면 프론트는 `GET /push-subscriptions/public-key`, `POST /push-subscriptions/test`도
+호출한다. 이 두 endpoint와 실제 VAPID 발송 로직은 아직 백엔드에 없다. 따라서 현재
+Push는 완성 기능이 아니라 추가 구현이 필요한 영역이다.
+
+## 기술 스택
+
+| 영역 | 현재 코드 |
+|---|---|
+| Framework | React 19 + TypeScript |
+| Bundler | Vite |
+| Routing | React Router |
+| Server state | TanStack Query |
+| Styling | Tailwind CSS |
+| Package manager | pnpm |
+| i18n | `src/i18n.ts`의 최소 dict |
+
+아래는 현재 `package.json`에 없는 계획성 의존성이다.
+
+```text
+Zustand
+shadcn/ui
+React Hook Form / Zod
+TanStack Table
+Recharts
+react-i18next
+```
+
+## 개발 명령
+
+```bash
+pnpm dev
+pnpm build
+pnpm exec tsc -b --pretty false
+pnpm preview
+```
+
+## 구현 위치
+
+```text
+src/App.tsx
+  라우팅, 로그인, 화면 구성, polling, 챗봇 선택지, 승인 bubble.
+
+src/api.ts
+  백엔드 API client와 타입.
+
+src/push.ts
+  service worker / Web Push 구독 시도.
+
+src/i18n.ts
+  최소 번역 dict.
+
+src/index.css
+  Tailwind와 전역 스타일.
+```
