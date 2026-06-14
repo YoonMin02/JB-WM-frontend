@@ -110,7 +110,8 @@ function AppShell({ page }: { page: Page }) {
   };
 
   const message = useMutation({
-    mutationFn: (text: string) => api.postMessage(sid!, text),
+    mutationFn: ({ text, kind, choicePath }: { text: string; kind?: string; choicePath?: string[] }) =>
+      api.postMessage(sid!, text, kind, choicePath),
     onSuccess: refetchAll,
   });
   const decide = useMutation({
@@ -240,9 +241,9 @@ function AppShell({ page }: { page: Page }) {
           />
           <ChatPanel
             busy={message.isPending}
-            onSend={(text) => {
+            onSend={(text, meta) => {
               setHasCustomerRequest(true);
-              message.mutate(text);
+              message.mutate({ text, kind: meta?.kind, choicePath: meta?.choicePath });
             }}
           />
           {progress && <CustomerProgress progress={progress} />}
@@ -611,7 +612,7 @@ function ChatPanel({
   onSend,
 }: {
   busy: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, meta?: { kind?: string; choicePath?: string[] }) => void;
 }) {
   const [path, setPath] = useState<string[]>([]);
   const [text, setText] = useState("");
@@ -627,10 +628,11 @@ function ChatPanel({
     setPath([]);
   };
 
-  const sendQuick = (label: string) => {
-    const message = [...path, label].join(" > ");
-    setLocalMessages((items) => [...items, { role: "user", content: label }]);
-    onSend(message);
+  const sendQuick = (item: GuidedItem) => {
+    const choicePath = [...path, item.label];
+    const message = choicePath.join(" > ");
+    setLocalMessages((items) => [...items, { role: "user", content: item.label }]);
+    onSend(message, { kind: item.kind, choicePath });
     setPath([]);
   };
 
@@ -661,7 +663,7 @@ function ChatPanel({
                 setLocalMessages((items) => [...items, { role: "user", content: item.label }]);
                 setPath([...path, item.label]);
               } else {
-                sendQuick(item.label);
+                sendQuick(item);
               }
             }}
           />
@@ -1049,6 +1051,7 @@ function buildReadiness(context: CustomerContext): ReadinessModel {
 
 type GuidedItem = {
   label: string;
+  kind?: string;
   children?: GuidedItem[];
 };
 
@@ -1057,49 +1060,122 @@ function guidedTree(path: string[]): GuidedItem[] {
     {
       label: "지병/건강 상태가 달라졌어요",
       children: [
-        { label: "새로운 지병을 진단받았어요" },
-        { label: "기존 지병이 악화됐어요" },
-        { label: "치료 방법이나 약이 바뀌었어요" },
-        { label: "병원비가 늘었어요" },
+        {
+          label: "새로운 지병을 진단받았어요",
+          children: [
+            { label: "치매나 인지저하 진단을 받았어요", kind: "health_deterioration" },
+            { label: "심혈관이나 혈압 관련 진단을 받았어요", kind: "health_deterioration" },
+            { label: "암이나 중증질환 진단을 받았어요", kind: "health_deterioration" },
+            { label: "다른 질환 진단을 받았어요", kind: "health_deterioration" },
+          ],
+        },
+        {
+          label: "기존 지병이 악화됐어요",
+          children: [
+            { label: "검사 수치가 나빠졌어요", kind: "health_deterioration" },
+            { label: "입원이나 수술 이야기를 들었어요", kind: "health_deterioration" },
+            { label: "일상생활이나 돌봄 부담이 늘었어요", kind: "health_deterioration" },
+          ],
+        },
+        {
+          label: "치료 방법이나 약이 바뀌었어요",
+          children: [
+            { label: "새 약을 먹기 시작했어요", kind: "health_deterioration" },
+            { label: "치료 주기가 바뀌었어요", kind: "health_deterioration" },
+            { label: "통원이나 검사 일정이 늘었어요", kind: "health_deterioration" },
+          ],
+        },
+        {
+          label: "병원비가 늘었어요",
+          children: [
+            { label: "최근 병원비가 크게 늘었어요", kind: "medical_spending_spike" },
+            { label: "약값이나 검사비가 늘었어요", kind: "medical_spending_spike" },
+            { label: "간병비가 필요할 것 같아요", kind: "medical_spending_spike" },
+          ],
+        },
       ],
     },
     {
       label: "금융 변동 사항이 있어요",
       children: [
-        { label: "소득이 줄었어요" },
-        { label: "큰 지출이 생겼어요" },
-        { label: "대출 상환이 부담돼요" },
-        { label: "투자 손실이 걱정돼요" },
+        {
+          label: "소득이 줄었어요",
+          children: [
+            { label: "월급이나 사업소득이 줄었어요", kind: "income_drop" },
+            { label: "연금이나 정기 입금이 줄었어요", kind: "income_drop" },
+            { label: "당분간 수입 공백이 생겼어요", kind: "income_drop" },
+          ],
+        },
+        {
+          label: "큰 지출이 생겼어요",
+          children: [
+            { label: "생활비가 갑자기 늘었어요", kind: "spending_spike" },
+            { label: "의료비나 간병비 지출이 커졌어요", kind: "medical_spending_spike" },
+            { label: "예상하지 못한 목돈 지출이 있어요", kind: "spending_spike" },
+          ],
+        },
+        {
+          label: "대출 상환이 부담돼요",
+          children: [
+            { label: "이번 달 대출 상환이 부담돼요", kind: "repayment_pressure" },
+            { label: "이자가 올라서 걱정돼요", kind: "repayment_pressure" },
+            { label: "대환이나 상환 가능성을 보고 싶어요", kind: "repayment_pressure" },
+          ],
+        },
+        {
+          label: "투자 손실이 걱정돼요",
+          children: [
+            { label: "최근 투자 손실이 커졌어요", kind: "portfolio_loss" },
+            { label: "고위험 자산 비중이 걱정돼요", kind: "portfolio_loss" },
+            { label: "포트폴리오 리밸런싱을 보고 싶어요", kind: "portfolio_loss" },
+          ],
+        },
+        {
+          label: "카드 결제가 부담돼요",
+          children: [
+            { label: "이번 달 카드 결제액이 커요", kind: "upcoming_card_payment_pressure" },
+            { label: "현금이 부족할까 걱정돼요", kind: "upcoming_card_payment_pressure" },
+            { label: "생활비와 카드 결제를 같이 봐주세요", kind: "upcoming_card_payment_pressure" },
+          ],
+        },
       ],
     },
     {
       label: "보험 가입/해지 변화가 있어요",
       children: [
-        { label: "새 보험에 가입했어요" },
-        { label: "보험을 해지했어요" },
-        { label: "보장 내용을 확인하고 싶어요" },
+        { label: "새 보험에 가입했어요", kind: "insurance_policy_change" },
+        { label: "보험을 해지했어요", kind: "insurance_policy_change" },
+        { label: "보험료 납입이 부담돼요", kind: "insurance_policy_change" },
+        { label: "보험료나 보장 내용이 바뀌었어요", kind: "insurance_policy_change" },
+        { label: "보장 내용을 확인하고 싶어요", kind: "insurance_gap" },
       ],
     },
     {
       label: "부동산, 차량 등 자산 변동이 있어요",
       children: [
-        { label: "부동산을 매도했어요" },
-        { label: "부동산을 매수했어요" },
-        { label: "차량을 매도/구매했어요" },
-        { label: "큰 금액을 증여/상속했어요" },
+        { label: "부동산을 매도했어요", kind: "non_financial_asset_change" },
+        { label: "부동산을 매수했어요", kind: "non_financial_asset_change" },
+        { label: "차량을 매도/구매했어요", kind: "non_financial_asset_change" },
+        { label: "큰 금액을 증여/상속했어요", kind: "non_financial_asset_change" },
       ],
     },
     {
       label: "전체 상태를 검토하고 싶어요",
       children: [
-        { label: "전체 자산과 건강 대비를 다시 봐주세요" },
-        { label: "노후 현금흐름을 점검해주세요" },
-        { label: "투자 성향을 바꾸고 싶어요" },
+        { label: "전체 자산과 건강 대비를 다시 봐주세요", kind: "routine_check" },
+        { label: "노후 현금흐름을 점검해주세요", kind: "routine_check" },
+        { label: "투자 성향을 바꾸고 싶어요", kind: "preference_update" },
       ],
     },
   ];
   if (path.length === 0) return root;
-  return root.find((item) => item.label === path[0])?.children ?? root;
+  let current = root;
+  for (const segment of path) {
+    const next = current.find((item) => item.label === segment)?.children;
+    if (!next) return current;
+    current = next;
+  }
+  return current;
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -1322,6 +1398,14 @@ function detectedLabel(session: api.Session | undefined): string {
   const labels: Record<string, string> = {
     portfolio_loss: "투자 손실",
     bp_rising: "건강 변화",
+    health_deterioration: "건강 변화",
+    medical_spending_spike: "의료비 증가",
+    income_drop: "소득 감소",
+    repayment_pressure: "대출 상환 부담",
+    spending_spike: "지출 증가",
+    upcoming_card_payment_pressure: "카드 결제 부담",
+    non_financial_asset_change: "비금융 자산 변동",
+    insurance_policy_change: "보험 변경",
     insurance_gap: "보험 보장 공백",
     cashflow: "현금흐름 변화",
     investment_adjust: "투자 조정 필요",
@@ -1362,6 +1446,7 @@ function kindLabel(kind: string): string {
     rebalance_portfolio: "투자 조정",
     cashflow_plan: "현금흐름",
     review_insurance: "보험 점검",
+    book_hospital: "진료 예약",
     report: "보고서",
     notify: "알림",
   };
