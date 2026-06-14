@@ -241,10 +241,13 @@ function AppShell({ page }: { page: Page }) {
           />
           <ChatPanel
             busy={message.isPending}
+            pendingProposal={(session.data?.proposals ?? []).find((p) => p.has_external_effect && p.status === "proposed") ?? null}
+            decisionBusy={decide.isPending}
             onSend={(text, meta) => {
               setHasCustomerRequest(true);
               message.mutate({ text, kind: meta?.kind, choicePath: meta?.choicePath });
             }}
+            onDecision={(pid, action) => decide.mutate({ pid, action })}
           />
           {progress && <CustomerProgress progress={progress} />}
           <ProposalHistory proposals={session.data?.proposals ?? []} onOpenApprovals={() => navigate("/approvals")} />
@@ -609,10 +612,16 @@ function ApprovalsPage({
 
 function ChatPanel({
   busy,
+  pendingProposal,
+  decisionBusy,
   onSend,
+  onDecision,
 }: {
   busy: boolean;
+  pendingProposal: api.Proposal | null;
+  decisionBusy: boolean;
   onSend: (text: string, meta?: { kind?: string; choicePath?: string[] }) => void;
+  onDecision: (pid: string, action: "approve" | "reject" | "revise") => void;
 }) {
   const [path, setPath] = useState<string[]>([]);
   const [text, setText] = useState("");
@@ -653,6 +662,13 @@ function ChatPanel({
             ),
           )}
           {busy && <AssistantBubble>확인하고 있어요.</AssistantBubble>}
+          {pendingProposal && (
+            <ApprovalBubble
+              proposal={pendingProposal}
+              busy={decisionBusy}
+              onDecision={(action) => onDecision(pendingProposal.id, action)}
+            />
+          )}
           <BotMenuCard
             path={path}
             items={quickItems}
@@ -766,6 +782,43 @@ function UserBubble({ children }: { children: React.ReactNode }) {
     <div className="flex justify-end">
       <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-[#FFDC35] px-4 py-3 text-sm font-semibold leading-relaxed text-[#333]">
         {children}
+      </div>
+    </div>
+  );
+}
+
+function ApprovalBubble({
+  proposal,
+  busy,
+  onDecision,
+}: {
+  proposal: api.Proposal;
+  busy: boolean;
+  onDecision: (action: "approve" | "reject" | "revise") => void;
+}) {
+  return (
+    <div className="flex justify-start">
+      <div className="w-[92%] rounded-2xl rounded-tl-sm border border-[#D5DBE5] bg-white p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#EAF0FF] text-sm font-extrabold text-[#0A31A8]">
+            JB
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-extrabold text-[#333]">고객님의 확인이 필요해요</p>
+              <Badge external={proposal.has_external_effect} />
+            </div>
+            <h3 className="mt-3 text-lg font-extrabold leading-snug text-[#222]">{proposal.summary}</h3>
+            {proposal.rationale && (
+              <p className="mt-3 text-sm font-semibold leading-relaxed text-[#555]">{proposal.rationale}</p>
+            )}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <ActBtn tone="primary" disabled={busy} onClick={() => onDecision("approve")}>승인</ActBtn>
+              <ActBtn tone="danger" disabled={busy} onClick={() => onDecision("reject")}>거절</ActBtn>
+              <ActBtn tone="ghost" disabled={busy} onClick={() => onDecision("revise")}>수정</ActBtn>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
