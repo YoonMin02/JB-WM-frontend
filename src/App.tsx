@@ -288,7 +288,7 @@ function AppHeader({
   return (
     <header className="sticky top-0 z-10 border-b border-[#EDF0F5] bg-white/95 px-5 py-3 backdrop-blur">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xl font-extrabold tracking-tight text-[#222]">JB WM</div>
+        <div className="text-xl font-extrabold tracking-tight text-[#222]">JB든든 AI매니저</div>
         <button
           aria-label="menu"
           onClick={onMenu}
@@ -334,7 +334,7 @@ function LoginPage({
   return (
     <div className="mx-auto min-h-screen max-w-md bg-gradient-to-b from-[#EEF6FF] via-[#F8FBFF] to-white px-5 py-8">
       <div className="mb-7">
-        <div className="text-3xl font-extrabold text-[#222]">JB WM</div>
+        <div className="text-3xl font-extrabold text-[#222]">JB든든 AI매니저</div>
         <p className="mt-2 text-base font-semibold leading-relaxed text-[#555]">
           발급된 고객 계정으로 로그인해 주세요.
         </p>
@@ -519,7 +519,7 @@ function ReadinessPage({
           <BarCompare label="권장 준비액" value={readiness.advisedMedicalReserve} max={readiness.advisedMedicalReserve} />
         </div>
         <p className="mt-4 rounded-xl bg-[#F0F4FF] p-3 text-sm font-semibold leading-relaxed text-[#0A31A8]">
-          현재 건강 신호는 {readiness.healthLabel}입니다. 치료 선택은 의료진과 결정하고, JB도우미는 비용과 현금흐름 부담만 계산합니다.
+          현재 건강 신호는 {readiness.healthLabel}입니다. 치료 선택은 의료진과 결정하고, JB든든은 비용과 현금흐름 부담만 계산합니다.
         </p>
       </section>
 
@@ -648,7 +648,7 @@ function ChatPanel({
   return (
     <section className="overflow-hidden rounded-2xl bg-white shadow-sm">
       <div className="border-b border-[#EDF0F5] px-5 py-4">
-        <SectionTitle title="JB도우미와 대화" />
+        <SectionTitle title="JB든든과 대화" />
         <p className="mt-1 text-sm font-semibold text-[#777]">말로 적거나 아래 버튼을 골라 알려주세요.</p>
       </div>
 
@@ -692,7 +692,7 @@ function ChatPanel({
             onKeyDown={(event) => {
               if (event.key === "Enter") submitText();
             }}
-            placeholder="JB도우미에게 메시지 보내기"
+            placeholder="JB든든에게 메시지 보내기"
             className="min-w-0 flex-1 rounded-full px-3 text-base font-semibold outline-none"
           />
           <button
@@ -725,11 +725,11 @@ function BotMenuCard({
     <div className="flex justify-start">
       <div className="w-[88%] rounded-2xl rounded-tl-sm bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-start gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#EAF0FF] text-sm font-extrabold text-[#0A31A8]">
-            JB
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#EAF0FF] text-xs font-extrabold text-[#0A31A8]">
+            든든
           </div>
           <div>
-            <p className="text-sm font-extrabold text-[#333]">JB도우미</p>
+            <p className="text-sm font-extrabold text-[#333]">JB든든</p>
             <p className="mt-1 text-sm font-semibold leading-relaxed text-[#555]">
               {path.length === 0
                 ? "무엇을 도와드릴까요? 아래에서 편하게 골라주세요."
@@ -800,8 +800,8 @@ function ApprovalBubble({
     <div className="flex justify-start">
       <div className="w-[92%] rounded-2xl rounded-tl-sm border border-[#D5DBE5] bg-white p-4 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#EAF0FF] text-sm font-extrabold text-[#0A31A8]">
-            JB
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#EAF0FF] text-xs font-extrabold text-[#0A31A8]">
+            든든
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
@@ -885,7 +885,7 @@ function ProposalHistory({ proposals, onOpenApprovals }: { proposals: api.Propos
   return (
     <section>
       <div className="flex items-center justify-between gap-3">
-        <SectionTitle title="도우미 제안" />
+        <SectionTitle title="JB든든 제안" />
         {pending.length > 0 && (
           <button onClick={onOpenApprovals} className="rounded-full bg-[#EAF0FF] px-3 py-1 text-xs font-extrabold text-[#0A31A8]">
             승인하기 {pending.length}
@@ -1073,7 +1073,7 @@ function buildReadiness(context: CustomerContext): ReadinessModel {
   const healthLabel = context.health.events.length > 0 ? "주의가 필요한 상태" : "안정적인 상태";
   const summary =
     score >= 75
-      ? "큰 변화가 생겨도 현재 자산과 현금흐름으로 대응 여지가 있습니다. 도우미가 계속 변화를 살피고 있어요."
+      ? "큰 변화가 생겨도 현재 자산과 현금흐름으로 대응 여지가 있습니다. JB든든이 계속 변화를 살피고 있어요."
       : score >= 55
         ? "기본 대비는 되어 있지만 의료비, 보험, 현금흐름 중 일부 보완이 필요합니다."
         : "예상치 못한 건강·자산 변화에 대비해 현금 여유와 보장 상태를 먼저 점검하는 편이 좋습니다.";
@@ -1396,7 +1396,7 @@ function progressInfo(
     return {
       activeStep,
       title: `${label}가 감지되었어요`,
-      subtitle: "고객님 선택이 필요한 제안이 준비됐어요. 아래 도우미 제안에서 확인할 수 있습니다.",
+      subtitle: "고객님 선택이 필요한 제안이 준비됐어요. 아래 JB든든 제안에서 확인할 수 있습니다.",
     };
   }
   const hasExecuted = proposals.some((proposal) => proposal.status === "executed" || proposal.status === "approved");
@@ -1412,7 +1412,7 @@ function progressInfo(
     return {
       activeStep,
       title: `${label}가 감지되었어요`,
-      subtitle: "JB도우미가 고객님의 최근 변화와 자산 상태를 함께 확인하고 있어요.",
+      subtitle: "JB든든이 고객님의 최근 변화와 자산 상태를 함께 확인하고 있어요.",
     };
   }
   if (!hasCustomerRequest) return null;

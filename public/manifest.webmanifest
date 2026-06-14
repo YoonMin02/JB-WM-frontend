@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "JB WM",
-  "short_name": "JB WM",
-  "description": "건강과 자산 변화를 함께 살피는 JB WM 도우미",
+  "name": "JB든든 AI매니저",
+  "short_name": "JB든든",
+  "description": "건강과 자산 변화를 함께 살피는 JB든든 AI매니저",
   "start_url": "/main",
   "scope": "/",
   "display": "standalone",

@@ -16,7 +16,7 @@ self.addEventListener("push", (event) => {
     }
   }
 
-  const title = payload.title || "JB WM 알림";
+  const title = payload.title || "JB든든 알림";
   const options = {
     body: payload.body || "확인할 제안이나 처리 결과가 있어요.",
     tag: payload.tag || "jbwm-workflow",
